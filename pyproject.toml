@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mexico-commercial-osint"
+version = "0.1.0"
+description = "Commercial OSINT toolkit for Mexican economic data (INEGI DENUE, SCIAN)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Emmanuel Ortiz" }]
+keywords = ["osint", "mexico", "inegi", "denue", "b2b", "geospatial", "entity-resolution"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+dependencies = [
+    "polars>=1.0",
+    "duckdb>=1.0",
+    "pyarrow>=15.0",
+    "rapidfuzz>=3.6",
+    "scikit-learn>=1.4",
+    "xgboost>=2.0",
+    "geopandas>=0.14",
+    "shapely>=2.0",
+    "folium>=0.15",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+    "duckduckgo-search>=4.0",
+    "tenacity>=8.2",
+    "loguru>=0.7",
+    "python-geohash>=0.8",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyterlab>=4.0",
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "nbconvert>=7.0",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "pre-commit>=3.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mx_osint"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+
+# Pre-commit hook: Run blacklist guardrail check
+bash scripts/check_blacklist.sh
