@@ -1,0 +1,77 @@
+{
+  "31": {
+    "sector": "Manufactura Alimentos y Textil",
+    "weight": 75.0,
+    "rationale": "High plant employee count, morning shift consumption"
+  },
+  "32": {
+    "sector": "Manufactura Quimica y Plastico",
+    "weight": 80.0,
+    "rationale": "Large workforce, continuous shifts, high volume requirements"
+  },
+  "33": {
+    "sector": "Manufactura Metalmecanica y Automotriz",
+    "weight": 85.0,
+    "rationale": "Tier 1/2 automotive suppliers, engineering and operations staff"
+  },
+  "43": {
+    "sector": "Comercio al por mayor",
+    "weight": 60.0,
+    "rationale": "Distribution centers with logistics and administrative staff"
+  },
+  "46": {
+    "sector": "Comercio al por menor",
+    "weight": 40.0,
+    "rationale": "Storefront retail, fragmented schedules"
+  },
+  "48": {
+    "sector": "Transporte y almacenamiento",
+    "weight": 70.0,
+    "rationale": "Cross-docking and dispatch hubs operating early and late"
+  },
+  "51": {
+    "sector": "Informacion y Telecomunicaciones",
+    "weight": 85.0,
+    "rationale": "Tech and engineering teams with high office beverage perks"
+  },
+  "52": {
+    "sector": "Servicios financieros",
+    "weight": 90.0,
+    "rationale": "Corporate bank branches and regional offices with executive suites"
+  },
+  "53": {
+    "sector": "Inmobiliarios y alquiler",
+    "weight": 55.0,
+    "rationale": "Leasing offices and property management teams"
+  },
+  "54": {
+    "sector": "Servicios profesionales y consultoria",
+    "weight": 95.0,
+    "rationale": "Law firms, accounting firms, engineering consultancies with high B2B budget"
+  },
+  "55": {
+    "sector": "Corporativos y sedes centrales",
+    "weight": 100.0,
+    "rationale": "Central enterprise management with formal executive hospitality procurement"
+  },
+  "56": {
+    "sector": "Servicios de apoyo a negocios",
+    "weight": 65.0,
+    "rationale": "Call centers, shared service centers, facilities management"
+  },
+  "61": {
+    "sector": "Servicios educativos",
+    "weight": 70.0,
+    "rationale": "University faculty lounges, campus administrative staff"
+  },
+  "62": {
+    "sector": "Servicios de salud",
+    "weight": 80.0,
+    "rationale": "Hospital medical staff and specialized private clinic personnel"
+  },
+  "72": {
+    "sector": "Hoteleria y restaurantes",
+    "weight": 50.0,
+    "rationale": "Banquets and hotel staff dining rooms"
+  }
+}

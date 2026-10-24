@@ -1,0 +1,77 @@
+{
+  "31": {
+    "sector": "Industrias manufactureras (Alimentos, Bebidas, Textil)",
+    "chronotype": "Early_Bird_6AM",
+    "gatekeeper_roles": ["Gerente de Planta", "Recursos Humanos", "Compras Indirectas"]
+  },
+  "32": {
+    "sector": "Industrias manufactureras (Madera, Papel, Quimica, Plastico)",
+    "chronotype": "Early_Bird_6AM",
+    "gatekeeper_roles": ["Gerente de Planta", "Seguridad e Higiene", "Compras Indirectas"]
+  },
+  "33": {
+    "sector": "Industrias manufactureras (Metalmecanica, Maquinaria, Automotriz)",
+    "chronotype": "Early_Bird_6AM",
+    "gatekeeper_roles": ["Gerente de Operaciones", "Recursos Humanos", "Compras MRO"]
+  },
+  "43": {
+    "sector": "Comercio al por mayor",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["Gerente Administrativo", "Encargado de Compras"]
+  },
+  "46": {
+    "sector": "Comercio al por menor",
+    "chronotype": "Retail_Late_10AM",
+    "gatekeeper_roles": ["Gerente de Sucursal", "Encargado de Turno"]
+  },
+  "48": {
+    "sector": "Transporte, correos y almacenamiento",
+    "chronotype": "Continuous_24_7",
+    "gatekeeper_roles": ["Jefe de Trafico", "Coordinador de Logistica", "RH Operativo"]
+  },
+  "51": {
+    "sector": "Informacion en medios masivos",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["People Operations", "Office Manager", "Direccion de Tecnologia"]
+  },
+  "52": {
+    "sector": "Servicios financieros y de seguros",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["Director de Sucursal", "Office Manager", "Recursos Humanos"]
+  },
+  "53": {
+    "sector": "Servicios inmobiliarios y de alquiler",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["Administrador de Inmuebles", "Recepcion"]
+  },
+  "54": {
+    "sector": "Servicios profesionales, cientificos y tecnicos",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["Socio Director", "Office Manager", "People & Culture"]
+  },
+  "55": {
+    "sector": "Corporativos",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["Director de Compras Corporativas", "Director de Recursos Humanos"]
+  },
+  "56": {
+    "sector": "Servicios de apoyo a los negocios y manejo de residuos",
+    "chronotype": "Office_Standard_8AM",
+    "gatekeeper_roles": ["Gerente de Operaciones", "Coordinador Administrativo"]
+  },
+  "61": {
+    "sector": "Servicios educativos",
+    "chronotype": "Early_Bird_6AM",
+    "gatekeeper_roles": ["Coordinador Academico", "Director Administrativo", "Cafeteria"]
+  },
+  "62": {
+    "sector": "Servicios de salud y de asistencia social",
+    "chronotype": "Continuous_24_7",
+    "gatekeeper_roles": ["Director Medico", "Jefe de Enfermeria", "Administracion"]
+  },
+  "72": {
+    "sector": "Servicios de alojamiento temporal y de preparacion de alimentos",
+    "chronotype": "Retail_Late_10AM",
+    "gatekeeper_roles": ["Gerente General", "Chef Ejecutivo", "Compras A&B"]
+  }
+}

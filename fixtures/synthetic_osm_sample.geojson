@@ -1,0 +1,325 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6898,
+          21.1127
+        ]
+      },
+      "properties": {
+        "osm_id": 9000001,
+        "name": "Punto de Interes 1",
+        "amenity": "restaurant",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.689,
+          21.1133
+        ]
+      },
+      "properties": {
+        "osm_id": 9000002,
+        "name": "Punto de Interes 2",
+        "amenity": "bank",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6882,
+          21.1139
+        ]
+      },
+      "properties": {
+        "osm_id": 9000003,
+        "name": "Punto de Interes 3",
+        "amenity": "pharmacy",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6874,
+          21.1145
+        ]
+      },
+      "properties": {
+        "osm_id": 9000004,
+        "name": "Punto de Interes 4",
+        "amenity": "fuel",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6906,
+          21.1151
+        ]
+      },
+      "properties": {
+        "osm_id": 9000005,
+        "name": "Punto de Interes 5",
+        "amenity": "hotel",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6898,
+          21.1157
+        ]
+      },
+      "properties": {
+        "osm_id": 9000006,
+        "name": "Punto de Interes 6",
+        "amenity": "cafe",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.689,
+          21.1163
+        ]
+      },
+      "properties": {
+        "osm_id": 9000007,
+        "name": "Punto de Interes 7",
+        "amenity": "restaurant",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6882,
+          21.1169
+        ]
+      },
+      "properties": {
+        "osm_id": 9000008,
+        "name": "Punto de Interes 8",
+        "amenity": "bank",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6874,
+          21.1175
+        ]
+      },
+      "properties": {
+        "osm_id": 9000009,
+        "name": "Punto de Interes 9",
+        "amenity": "pharmacy",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6906,
+          21.1181
+        ]
+      },
+      "properties": {
+        "osm_id": 9000010,
+        "name": "Punto de Interes 10",
+        "amenity": "fuel",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6898,
+          21.1187
+        ]
+      },
+      "properties": {
+        "osm_id": 9000011,
+        "name": "Punto de Interes 11",
+        "amenity": "hotel",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.689,
+          21.1193
+        ]
+      },
+      "properties": {
+        "osm_id": 9000012,
+        "name": "Punto de Interes 12",
+        "amenity": "cafe",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6882,
+          21.1199
+        ]
+      },
+      "properties": {
+        "osm_id": 9000013,
+        "name": "Punto de Interes 13",
+        "amenity": "restaurant",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6874,
+          21.1205
+        ]
+      },
+      "properties": {
+        "osm_id": 9000014,
+        "name": "Punto de Interes 14",
+        "amenity": "bank",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6906,
+          21.1211
+        ]
+      },
+      "properties": {
+        "osm_id": 9000015,
+        "name": "Punto de Interes 15",
+        "amenity": "pharmacy",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6898,
+          21.1217
+        ]
+      },
+      "properties": {
+        "osm_id": 9000016,
+        "name": "Punto de Interes 16",
+        "amenity": "fuel",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.689,
+          21.1223
+        ]
+      },
+      "properties": {
+        "osm_id": 9000017,
+        "name": "Punto de Interes 17",
+        "amenity": "hotel",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6882,
+          21.1229
+        ]
+      },
+      "properties": {
+        "osm_id": 9000018,
+        "name": "Punto de Interes 18",
+        "amenity": "cafe",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6874,
+          21.1235
+        ]
+      },
+      "properties": {
+        "osm_id": 9000019,
+        "name": "Punto de Interes 19",
+        "amenity": "restaurant",
+        "opening_hours": "08:00-20:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -101.6906,
+          21.1241
+        ]
+      },
+      "properties": {
+        "osm_id": 9000020,
+        "name": "Punto de Interes 20",
+        "amenity": "bank",
+        "opening_hours": "08:00-20:00"
+      }
+    }
+  ]
+}
