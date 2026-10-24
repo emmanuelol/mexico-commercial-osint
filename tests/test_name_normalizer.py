@@ -190,6 +190,281 @@ def classify_b2b_email_role(email: str | None) -> str:
     return "corporate_direct"
 
 
+def cluster_corporate_entities(df: pl.DataFrame, fuzzy_threshold: float = 0.85) -> pl.DataFrame:
+    """
+    Clusters multi-plant corporate campuses and duplicate branch entries using
+    RapidFuzz WRatio and branch-qualifier stripping across legal and commercial names.
+    Prevents false merges on empty or generic legal names and propagates contacts.
+    """
+    name_col = "nombre_estab" if "nombre_estab" in df.columns else "business_name"
+    legal_col = "raz_social" if "raz_social" in df.columns else "legal_name"
+    id_col = "clee" if "clee" in df.columns else ("id" if "id" in df.columns else "row_id")
+
+    if "geohash" not in df.columns:
+        df = assign_geohash_block(df, precision=6)
+
+    norm_commercial = [normalize_mexican_legal_name(str(n or "")) for n in df[name_col].to_list()]
+    parent_commercial = [strip_corporate_branch_qualifiers(str(n or "")) for n in df[name_col].to_list()]
+    norm_legal = [normalize_mexican_legal_name(str(l or "")) if l else "" for l in df[legal_col].to_list()]
+    parent_legal = [strip_corporate_branch_qualifiers(str(l or "")) if l else "" for l in df[legal_col].to_list()]
+
+    df_prep = df.with_columns([
+        pl.Series("norm_name", norm_commercial),
+        pl.Series("parent_name", parent_commercial),
+        pl.Series("norm_legal", norm_legal),
+        pl.Series("parent_legal", parent_legal),
+    ])
+
+    generic_stop = {"SERVICIOS", "COMERCIAL", "GRUPO", "DISTRIBUIDORA", "LOGISTICA", "CENTRO", "DESPACHO", "TIENDA", "ABARROTES"}
+    records = df_prep.to_dicts()
+    n = len(records)
+
+    parent_map = list(range(n))
+
+    def find(i):
+        if parent_map[i] == i:
+            return i
+        parent_map[i] = find(parent_map[i])
+        return parent_map[i]
+
+    def union(i, j):
+        root_i = find(i)
+        root_j = find(j)
+        if root_i != root_j:
+            parent_map[root_j] = root_i
+
+    for i in range(n):
+        rec_i = records[i]
+        leg_i = rec_i["norm_legal"]
+        pcomm_i = rec_i["parent_name"]
+
+        for j in range(i + 1, n):
+            rec_j = records[j]
+            leg_j = rec_j["norm_legal"]
+            pcomm_j = rec_j["parent_name"]
+
+            is_match = False
+            # 1. Exact legal name match (if not empty and not generic and len >= 5)
+            if leg_i and leg_j and leg_i == leg_j and len(leg_i) >= 5 and leg_i not in generic_stop:
+                is_match = True
+            # 2. Strong fuzzy match on legal name (>= 90)
+            elif leg_i and leg_j and len(leg_i) >= 6 and len(leg_j) >= 6 and leg_i not in generic_stop and leg_j not in generic_stop:
+                if fuzz.WRatio(leg_i, leg_j) >= 90.0:
+                    is_match = True
+            # 3. Commercial parent match
+            elif pcomm_i and pcomm_j and len(pcomm_i) >= 5 and len(pcomm_j) >= 5 and pcomm_i not in generic_stop and pcomm_j not in generic_stop:
+                if pcomm_i == pcomm_j:
+                    is_match = True
+                elif fuzz.WRatio(pcomm_i, pcomm_j) >= (fuzzy_threshold * 100.0):
+                    is_match = True
+
+            if is_match:
+                union(i, j)
+
+    from collections import defaultdict
+    clusters = defaultdict(list)
+    for i in range(n):
+        root = find(i)
+        clusters[root].append(i)
+
+    canonical_entity_ids = [None] * n
+    canonical_parent_names = [None] * n
+    is_duplicate = [False] * n
+    inherited_emails = [None] * n
+    inherited_websites = [None] * n
+    inherited_phones = [None] * n
+
+    for root, indices in clusters.items():
+        def site_priority(idx):
+            r = records[idx]
+            name = str(r.get(name_col, "")).upper()
+            is_mat = 1 if "MATRIZ" in name or "CORPORATIVO" in name else 0
+            has_em = 1 if r.get("email") or r.get("correoelec") else 0
+            score = float(r.get("b2b_5d_score") or 0.0)
+            return (is_mat, has_em, score)
+
+        sorted_indices = sorted(indices, key=site_priority, reverse=True)
+        primary_idx = sorted_indices[0]
+        primary_rec = records[primary_idx]
+
+        best_legal = primary_rec.get("raz_social") or primary_rec.get("legal_name")
+        cleaned_leg = normalize_mexican_legal_name(best_legal) if best_legal else ""
+        if cleaned_leg and len(cleaned_leg) >= 5 and cleaned_leg not in generic_stop:
+            canonical_name = cleaned_leg
+        else:
+            canonical_name = primary_rec.get("parent_name") or primary_rec.get(name_col)
+
+        canonical_id = f"ent_{hashlib.sha1(canonical_name.encode('utf-8')).hexdigest()[:12]}"
+
+        best_email = ""
+        best_website = ""
+        best_phone = ""
+        for idx in sorted_indices:
+            r = records[idx]
+            em = r.get("email") or r.get("correoelec") or ""
+            web = r.get("website") or r.get("www") or ""
+            ph = r.get("phone") or r.get("telefono") or ""
+            if em and not best_email:
+                best_email = str(em).strip()
+            if web and not best_website:
+                best_website = str(web).strip()
+            if ph and not best_phone:
+                best_phone = str(ph).strip()
+
+        for idx in sorted_indices:
+            canonical_entity_ids[idx] = canonical_id
+            canonical_parent_names[idx] = canonical_name
+            if idx != primary_idx:
+                is_duplicate[idx] = True
+
+            curr_em = records[idx].get("email") or records[idx].get("correoelec") or ""
+            curr_web = records[idx].get("website") or records[idx].get("www") or ""
+            curr_ph = records[idx].get("phone") or records[idx].get("telefono") or ""
+
+            inherited_emails[idx] = best_email if (not curr_em and best_email) else curr_em
+            inherited_websites[idx] = best_website if (not curr_web and best_website) else curr_web
+            inherited_phones[idx] = best_phone if (not curr_ph and best_phone) else curr_ph
+
+    df_out = df_prep.with_columns([
+        pl.Series("canonical_entity_id", canonical_entity_ids),
+        pl.Series("canonical_parent_name", canonical_parent_names),
+        pl.Series("is_duplicate", is_duplicate),
+        pl.Series("inherited_email", inherited_emails),
+        pl.Series("inherited_website", inherited_websites),
+        pl.Series("inherited_phone", inherited_phones),
+    ])
+
+    site_counts = df_out.group_by("canonical_entity_id").agg(pl.len().alias("campus_site_count"))
+    df_out = df_out.join(site_counts, on="canonical_entity_id", how="left")
+
+    payroll_col = "estimated_monthly_payroll_mxn" if "estimated_monthly_payroll_mxn" in df_out.columns else (
+        "est_monthly_payroll_mxn" if "est_monthly_payroll_mxn" in df_out.columns else None
+    )
+    if payroll_col:
+        payroll_agg = df_out.group_by("canonical_entity_id").agg(pl.col(payroll_col).sum().alias("campus_consolidated_payroll_mxn"))
+        df_out = df_out.join(payroll_agg, on="canonical_entity_id", how="left")
+    else:
+        df_out = df_out.with_columns(pl.lit(0.0).alias("campus_consolidated_payroll_mxn"))
+
+    return df_out
+
+
+def synthesize_corporate_domain_contact(website: str | None) -> dict:
+    """Derives sanitized corporate domain and standard B2B functional role inboxes."""
+    if not website or not isinstance(website, str):
+        return {"domain": "", "synthesized_email": "", "alternate_inboxes": []}
+
+    clean_w = website.strip().lower()
+    for prefix in ["https://", "http://", "www."]:
+        if clean_w.startswith(prefix):
+            clean_w = clean_w[len(prefix):]
+    clean_w = clean_w.split("/")[0].split("?")[0].strip()
+
+    free_domains = ["facebook.com", "instagram.com", "twitter.com", "google.com", "maps.google.com"]
+    if not clean_w or "." not in clean_w or any(clean_w.endswith(fd) for fd in free_domains):
+        return {"domain": "", "synthesized_email": "", "alternate_inboxes": []}
+
+    domain = clean_w
+    synth_email = f"contacto@{domain}"
+    alternates = [f"rh@{domain}", f"compras@{domain}", f"ventas@{domain}"]
+    return {
+        "domain": domain,
+        "synthesized_email": synth_email,
+        "alternate_inboxes": alternates,
+    }
+
+
+def evaluate_stage2_actionability(rec: dict) -> dict:
+    """Evaluates multi-channel B2B actionability across direct email, campus inheritance, domain synthesis, and phone/ABM."""
+    b2b_status = rec.get("b2b_status", "")
+    is_rescued = rec.get("is_rescued_partial", False)
+    email = (rec.get("email") or "").strip()
+    inherited_em = (rec.get("inherited_email") or "").strip()
+    website = (rec.get("website") or "").strip()
+    phone = (rec.get("phone") or "").strip()
+    score = float(rec.get("b2b_5d_score") or 0.0)
+    headcount = int(rec.get("estimated_headcount") or 0)
+
+    # 1. Direct Email (Target or Rescued Partial with verified direct email)
+    if (b2b_status == "target" or is_rescued) and email:
+        return {
+            "is_actionable": True,
+            "channel": "Direct Email (Verified DENUE)",
+            "rescue_reason": "Stage-01 Verified Direct Email",
+            "effective_email": email,
+            "actionable_tier": "Tier-1 Direct Email",
+        }
+
+    # 2. Campus Inherited Email
+    if (b2b_status == "target" or is_rescued) and inherited_em:
+        return {
+            "is_actionable": True,
+            "channel": "Campus Inherited Email (Parent Entity)",
+            "rescue_reason": "Campus Contact Inheritance",
+            "effective_email": inherited_em,
+            "actionable_tier": "Tier-1 Campus Inherited",
+        }
+
+    # 3. Target without email, but has corporate website -> Domain Synthesized
+    synth = synthesize_corporate_domain_contact(website)
+    if (b2b_status == "target" or is_rescued) and synth["synthesized_email"]:
+        return {
+            "is_actionable": True,
+            "channel": "Website / Synthesized Domain Email",
+            "rescue_reason": "Corporate Web Domain Contact Synthesis",
+            "effective_email": synth["synthesized_email"],
+            "actionable_tier": "Tier-2 Domain Synthesized",
+        }
+
+    # 4. Tier-1 Corporate Domain Partial Upgrade
+    if b2b_status == "partial" and score >= 4.8:
+        role = classify_b2b_email_role(email)
+        if email and role in ["corporate_direct", "decision_maker_role", "generic_role_inbox"]:
+            return {
+                "is_actionable": True,
+                "channel": "Direct Email (Rescued Tier-1 Corporate)",
+                "rescue_reason": "Tier-1 Corporate Domain Partial Upgrade",
+                "effective_email": email,
+                "actionable_tier": "Tier-1 Rescued Partial",
+            }
+        elif website and synth["synthesized_email"] and headcount >= 31:
+            return {
+                "is_actionable": True,
+                "channel": "Website / Synthesized Domain Email",
+                "rescue_reason": "Tier-1 Corporate Headcount & Domain Partial Upgrade",
+                "effective_email": synth["synthesized_email"],
+                "actionable_tier": "Tier-2 Rescued Partial",
+            }
+
+    # 5. Direct Phone + LinkedIn ABM
+    if (b2b_status == "target" or is_rescued) and phone:
+        return {
+            "is_actionable": True,
+            "channel": "Direct Phone + LinkedIn ABM",
+            "rescue_reason": "Multi-Channel Phone & Executive Search Rescue",
+            "effective_email": "",
+            "actionable_tier": "Tier-3 Phone / ABM",
+        }
+
+    # 6. Field Sales + LinkedIn ABM
+    if b2b_status == "target" or is_rescued:
+        return {
+            "is_actionable": True,
+            "channel": "Field Sales + LinkedIn ABM",
+            "rescue_reason": "Storefront Physical Visit & Executive Search Rescue",
+            "effective_email": "",
+            "actionable_tier": "Tier-4 Field Sales / ABM",
+        }
+
+    return {
+        "is_actionable": False,
+        "channel": "Non-Actionable (Low Priority)",
+        "rescue_reason": "Does not meet commercial qualification criteria",
+        "effective_email": "",
+        "actionable_tier": "Inactive",
+    }
+
+
 def test_normalize_mexican_legal_suffixes():
     test_cases = [
         ("GRUPO INDUSTRIAL DEL BAJÍO S.A. DE C.V.", "GRUPO INDUSTRIAL DEL BAJIO"),
@@ -277,3 +552,100 @@ def test_classify_b2b_email_role():
     assert classify_b2b_email_role("juan.perez@continental.com") == "corporate_direct"
     assert classify_b2b_email_role("negocio@gmail.com") == "free_personal"
     assert classify_b2b_email_role(None) == "none"
+
+
+def test_corporate_clustering_and_inheritance():
+    df = pl.DataFrame({
+        "clee": ["110370001", "110370002", "110370003"],
+        "nombre_estab": ["AUMOVIO MATRIZ", "AUMOVIO BODEGA", "PAPELERIA LOPEZ"],
+        "raz_social": ["AUMOVIO MEXICO S.A. DE C.V.", "AUMOVIO MEXICO S.A. DE C.V.", ""],
+        "lat": [20.95, 20.952, 20.951],
+        "lon": [-101.41, -101.412, -101.411],
+        "email": ["contacto@aumovio.com", "", ""],
+        "phone": ["4721234567", "", "4729876543"],
+        "website": ["www.aumovio.com", "", ""],
+        "b2b_status": ["target", "target", "low_potential"],
+        "b2b_5d_score": [8.5, 8.2, 3.1],
+        "estimated_headcount": [250, 40, 3],
+        "estimated_monthly_payroll_mxn": [2500000.0, 400000.0, 30000.0],
+    })
+    clustered = cluster_corporate_entities(df)
+    # Check that AUMOVIO records are clustered together
+    aumovio_1 = clustered.filter(pl.col("clee") == "110370001").to_dicts()[0]
+    aumovio_2 = clustered.filter(pl.col("clee") == "110370002").to_dicts()[0]
+    pape = clustered.filter(pl.col("clee") == "110370003").to_dicts()[0]
+
+    assert aumovio_1["canonical_entity_id"] == aumovio_2["canonical_entity_id"]
+    assert aumovio_2["canonical_parent_name"] == "AUMOVIO MEXICO"
+    assert aumovio_2["campus_site_count"] == 2
+    # Campus contact inheritance: AUMOVIO BODEGA inherits email and website from MATRIZ
+    assert aumovio_2["inherited_email"] == "contacto@aumovio.com"
+    # Papeleria Lopez with empty raz_social must NOT be falsely merged into AUMOVIO!
+    assert pape["canonical_entity_id"] != aumovio_1["canonical_entity_id"]
+    assert pape["campus_site_count"] == 1
+
+
+def test_synthesize_corporate_domain_contact():
+    synth = synthesize_corporate_domain_contact("www.ingcapricornio.mx")
+    assert synth["domain"] == "ingcapricornio.mx"
+    assert synth["synthesized_email"] == "contacto@ingcapricornio.mx"
+    assert "rh@ingcapricornio.mx" in synth["alternate_inboxes"]
+
+
+def test_evaluate_stage2_actionability():
+    # Record 1: Target with direct email -> Direct Email
+    rec1 = {
+        "b2b_status": "target",
+        "is_rescued_partial": False,
+        "email": "juan@empresa.com",
+        "inherited_email": "",
+        "website": "",
+        "phone": "4720000000",
+        "b2b_5d_score": 7.5,
+        "estimated_headcount": 50,
+    }
+    # Record 2: Target without direct email, but has corporate website -> Domain Synthesized
+    rec2 = {
+        "b2b_status": "target",
+        "is_rescued_partial": False,
+        "email": "",
+        "inherited_email": "",
+        "website": "www.proinceautomatizacion.com",
+        "phone": "4720000001",
+        "b2b_5d_score": 6.8,
+        "estimated_headcount": 25,
+    }
+    # Record 3: Partial with corporate email & high score -> Rescued Tier-1 Corporate
+    rec3 = {
+        "b2b_status": "partial",
+        "is_rescued_partial": False,
+        "email": "rcgarcia@hotsson.com",
+        "inherited_email": "",
+        "website": "www.hotsson.com",
+        "phone": "4720000002",
+        "b2b_5d_score": 5.2,
+        "estimated_headcount": 251,
+    }
+    # Record 4: Low potential -> Not actionable
+    rec4 = {
+        "b2b_status": "low_potential",
+        "is_rescued_partial": False,
+        "email": "tienda@gmail.com",
+        "inherited_email": "",
+        "website": "",
+        "phone": "4720000003",
+        "b2b_5d_score": 2.1,
+        "estimated_headcount": 2,
+    }
+
+    assert evaluate_stage2_actionability(rec1)["is_actionable"] is True
+    assert evaluate_stage2_actionability(rec1)["channel"] == "Direct Email (Verified DENUE)"
+    
+    assert evaluate_stage2_actionability(rec2)["is_actionable"] is True
+    assert "Website / Synthesized Domain" in evaluate_stage2_actionability(rec2)["channel"]
+
+    assert evaluate_stage2_actionability(rec3)["is_actionable"] is True
+    assert "Tier-1 Corporate Domain" in evaluate_stage2_actionability(rec3)["rescue_reason"]
+
+    assert evaluate_stage2_actionability(rec4)["is_actionable"] is False
+
