@@ -860,7 +860,7 @@ def test_canonical_account_separation():
 def test_corporate_email_domain_unioning():
     df = pl.DataFrame({
         "clee": ["11037010", "11037011", "11037012", "11037013"],
-        "nombre_estab": ["CONSORCIO INDUSTRIAL MEXICANO", "LEAR SILAO", "PAPELERIA EL SOL", "PAPELERIA LA LUNA"],
+        "nombre_estab": ["CONSORCIO INDUSTRIAL MEXICANO", "LEAR PLANTA BAJIO", "PAPELERIA EL SOL", "PAPELERIA LA LUNA"],
         "raz_social": ["CONSORCIO INDUSTRIAL MEXICANO DE AUTOPARTES S.A. DE C.V.", "LEAR CORPORATION MEXICO S. DE R.L. DE C.V.", "PAPELERIA EL SOL S.A. DE C.V.", "PAPELERIA LA LUNA S.A. DE C.V."],
         "lat": [20.950, 20.955, 20.940, 20.942],
         "lon": [-101.410, -101.415, -101.400, -101.402],
