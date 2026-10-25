@@ -196,3 +196,35 @@ def test_migrated_modules_imports():
     assert hasattr(mx_osint.enrichment.b2b_propensity, "calculate_b2b_emv_record")
     assert hasattr(mx_osint.reporting.prospect_report, "export_dual")
 
+
+def test_migrated_standalone_callability():
+    from mx_osint.sources.denue_loader import filter_by_strata
+    from mx_osint.enrichment.digital_maturity import classify_digital_maturity_record, discover_channel_ddg
+    from mx_osint.activation.channel_classifier import assign_offer_playbook, ANCHOR_LAT, ANCHOR_LON
+    from mx_osint.models.denue import generate_synthetic_denue_fixture
+
+    # Test standalone filter_by_strata without NameError on STRATA_ORDER
+    sample_df = pl.DataFrame({"employee_strata": ["11 a 30 personas", "0 a 5 personas"]})
+    res_df = filter_by_strata(sample_df, "11 a 30 personas")
+    assert len(res_df) == 1
+
+    # Test standalone discover_channel_ddg without NameError on ddg_cache
+    res_ddg = discover_channel_ddg("Empresa Test")
+    assert "status" in res_ddg
+
+    # Test standalone classify_digital_maturity_record
+    mat = classify_digital_maturity_record({"effective_contact": "test@corp.mx", "email_confidence": "high"})
+    assert "digital_maturity_score" in mat
+
+    # Test ANCHOR_LAT and ANCHOR_LON in channel_classifier
+    assert round(ANCHOR_LAT, 2) == 21.12
+    assert round(ANCHOR_LON, 2) == -101.68
+    pb = assign_offer_playbook({"canonical_parent_name": "Test Plant", "scian_code": "3361"})
+    assert "playbook_code" in pb
+
+    # Test docstring clean-room
+    doc = generate_synthetic_denue_fixture.__doc__ or ""
+    assert "Paseo MS" not in doc
+    assert "target anchor" in doc
+
+

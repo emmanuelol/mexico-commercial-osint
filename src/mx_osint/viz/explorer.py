@@ -1,5 +1,6 @@
 from mx_osint.config import Settings
 settings = Settings()
+from mx_osint.models.denue import STRATA_ORDER, STRATA_HEADCOUNT_MIDPOINT
 
 from pathlib import Path
 import matplotlib.pyplot as plt

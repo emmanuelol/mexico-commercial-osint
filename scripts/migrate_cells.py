@@ -87,6 +87,16 @@ def export_dual(df_canonical: pl.DataFrame, df_field_routed: pl.DataFrame, base_
         return source
 
     clean_nodes = []
+    def _get_target_names(t):
+        if isinstance(t, ast.Name):
+            return [t.id]
+        elif isinstance(t, (ast.Tuple, ast.List)):
+            names = []
+            for elt in t.elts:
+                names.extend(_get_target_names(elt))
+            return names
+        return []
+
     for node in tree.body:
         # Keep all imports
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -99,11 +109,9 @@ def export_dual(df_canonical: pl.DataFrame, df_field_routed: pl.DataFrame, base_
             target_names = []
             if isinstance(node, ast.Assign):
                 for t in node.targets:
-                    if isinstance(t, ast.Name):
-                        target_names.append(t.id)
+                    target_names.extend(_get_target_names(t))
             elif isinstance(node, ast.AnnAssign):
-                if isinstance(node.target, ast.Name):
-                    target_names.append(node.target.id)
+                target_names.extend(_get_target_names(node.target))
 
             # Only keep module-level constants (PEP8 uppercase or dunder/private)
             if target_names and all(t.isupper() or t.startswith("__") for t in target_names):
@@ -129,8 +137,20 @@ def export_dual(df_canonical: pl.DataFrame, df_field_routed: pl.DataFrame, base_
         missing_imports.append("import json")
     if "re." in unparsed and "import re" not in unparsed:
         missing_imports.append("import re")
+    if "logger." in unparsed and "logger" not in unparsed:
+        missing_imports.append("from loguru import logger")
+    if "time." in unparsed and "import time" not in unparsed:
+        missing_imports.append("import time")
+    if "requests." in unparsed and "import requests" not in unparsed:
+        missing_imports.append("import requests")
     if "settings." in unparsed and "Settings" not in unparsed:
         missing_imports.append("from mx_osint.config import Settings\nsettings = Settings()")
+    if "STRATA_ORDER" in unparsed and "from mx_osint.models.denue" not in unparsed and not re.search(r"^\s*STRATA_ORDER\s*[:=]", unparsed, re.MULTILINE):
+        missing_imports.append("from mx_osint.models.denue import STRATA_ORDER, STRATA_HEADCOUNT_MIDPOINT")
+    if "ANCHOR_LAT" in unparsed and not re.search(r"^\s*ANCHOR_LAT\b", unparsed, re.MULTILINE):
+        missing_imports.append("ANCHOR_LAT = 21.1221\nANCHOR_LON = -101.6826")
+    if "ddg_cache" in unparsed and not re.search(r"^\s*ddg_cache\s*[:=]", unparsed, re.MULTILINE):
+        missing_imports.append("ddg_cache: dict[str, dict] = {}")
 
     if missing_imports:
         unparsed = "\n".join(missing_imports) + "\n\n" + unparsed
@@ -184,6 +204,13 @@ def main():
                 touched_files.add(target_file)
             else:
                 mode = "a"
+
+            # If overwriting with identical content, leave file untouched
+            if mode == "w" and target_file.exists():
+                with open(target_file, "r", encoding="utf-8") as f_ex:
+                    if f_ex.read().strip() == cleaned_code.strip():
+                        print(f"    Unchanged: {target_file}")
+                        continue
 
             with open(target_file, mode, encoding="utf-8") as f:
                 if mode == "a":

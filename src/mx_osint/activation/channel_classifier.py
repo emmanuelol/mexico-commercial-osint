@@ -1,6 +1,7 @@
 import polars as pl
 
 import math
+ANCHOR_LAT, ANCHOR_LON = (21.1221, -101.6826)
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     r = 6371.0

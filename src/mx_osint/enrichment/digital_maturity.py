@@ -1,3 +1,5 @@
+ddg_cache: dict[str, dict] = {}
+
 import time
 from loguru import logger
 

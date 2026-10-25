@@ -1,3 +1,4 @@
+import time
 from mx_osint.config import Settings
 settings = Settings()
 
@@ -62,7 +63,7 @@ class DENUEDataset(BaseModel):
         return self.records_with_email / self.total_records * 100 if self.total_records > 0 else 0.0
 
 def generate_synthetic_denue_fixture(output_path: Path=Path('data/raw/synthetic_denue_fallback.parquet'), n_rows: int=500) -> Path:
-    """Generates offline fallback DENUE sample centered on Paseo MS without mutating test fixtures."""
+    """Generates offline fallback DENUE sample centered on target anchor without mutating test fixtures."""
     random.seed(42)
     scian_codes = [('621111', 'Consultorios de medicina general del sector privado'), ('541110', 'Bufetes jurídicos'), ('541211', 'Servicios de contabilidad y auditoría'), ('541330', 'Servicios de ingeniería'), ('541510', 'Servicios de diseño de sistemas de cómputo'), ('336390', 'Fabricación de otras partes para vehículos automotrices'), ('721111', 'Hoteles con otros servicios integrados'), ('522110', 'Banca múltiple')]
     rows = []

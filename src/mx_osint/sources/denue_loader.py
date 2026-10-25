@@ -1,3 +1,5 @@
+from mx_osint.models.denue import STRATA_ORDER, STRATA_HEADCOUNT_MIDPOINT
+
 import hashlib
 import io
 import math
