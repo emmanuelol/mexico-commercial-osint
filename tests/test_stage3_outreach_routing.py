@@ -6,7 +6,11 @@ import polars as pl
 from pathlib import Path
 
 
-def generate_b2b_pitch(account: dict) -> dict:
+def generate_b2b_pitch(
+    account: dict,
+    anchor_name: str = "The Coffee — Bajío Hub",
+    region_name: str = "el Bajío"
+) -> dict:
     """
     Generates personalized multi-channel B2B pitches stratified by industry tier,
     academic tier, headcount, and contact risk guardrails.
@@ -30,7 +34,7 @@ def generate_b2b_pitch(account: dict) -> dict:
     # 2. Industry / Academic Tailoring
     if academic_tier in ["high_automation_engineering", "specialized_technical"]:
         value_prop = "soluciones de abastecimiento de café de especialidad y coffee breaks corporativos para juntas operativas y cambios de turno"
-        hook = f"Con más de {headcount:,} colaboradores en su complejo de Silao, sabemos que la productividad y la retención del talento técnico son críticas."
+        hook = f"Con más de {headcount:,} colaboradores en su complejo de {region_name}, sabemos que la productividad y la retención del talento técnico son críticas."
     elif academic_tier == "corporate_professional":
         value_prop = "convenios ejecutivos de barra de café y servicio para salas de consejo y atención a clientes corporativos"
         hook = f"Diseñado específicamente para optimizar la experiencia de los {headcount:,} profesionales en sus instalaciones."
@@ -38,25 +42,25 @@ def generate_b2b_pitch(account: dict) -> dict:
         value_prop = "servicio ágil de café para oficinas administrativas y eventos corporativos"
         hook = f"Atendiendo el flujo operativo de {headcount:,} empleados con tiempos de entrega garantizados."
 
-    subject = f"[Paseo MS] Convenio de Café & Coffee Breaks para {name}"
+    subject = f"[{anchor_name}] Convenio de Café & Coffee Breaks para {name}"
     
     body = (
         f"Estimado equipo de {name},\n\n"
         f"{hook}\n\n"
-        f"Desde The Coffee — Paseo MS (Silao), ofrecemos {value_prop}, "
-        f"con entrega programada a pie de planta o recepción ejecutiva.\n\n"
+        f"Desde {anchor_name}, ofrecemos {value_prop}, "
+        f"con pedidos corporativos vía Rappi o entrega para juntas ejecutivas con facturación CFDI 4.0.\n\n"
         f"¿Tendrían 5 minutos esta semana para presentarles el catálogo corporativo de degustación sin costo?\n\n"
-        f"Saludos cordiales,\nEquipo Comercial — The Coffee Paseo MS"
+        f"Saludos cordiales,\nEquipo Comercial — {anchor_name}"
     )
 
     linkedin = (
-        f"Hola! Me pongo en contacto desde The Coffee Paseo MS. "
+        f"Hola! Me pongo en contacto desde {anchor_name}. "
         f"Buscamos coordinar convenios de coffee break y abastecimiento para el equipo de {name}. "
         f"¿Podemos conectar?"
     )
 
     whatsapp = (
-        f"Hola, buenas tardes. Me comunico de The Coffee en Paseo MS Silao. "
+        f"Hola, buenas tardes. Me comunico de {anchor_name}. "
         f"Queremos enviar un kit de degustación de café de especialidad y catálogo de coffee breaks "
         f"para el área de compras/RH de {name}. ¿Con quién podríamos canalizarlo?"
     )
@@ -174,13 +178,13 @@ def test_generate_b2b_pitch_engineering_low_risk():
         "best_contact_channel": "Direct Email (Verified DENUE)",
     }
     pitch = generate_b2b_pitch(acc)
-    assert "[Paseo MS]" in pitch["email_subject"]
+    assert "[The Coffee — Bajío Hub]" in pitch["email_subject"]
     assert "AUMOVIO MEXICO" in pitch["email_subject"]
     assert "1,225" in pitch["email_body"]
     assert "productividad" in pitch["email_body"]
     assert pitch["outreach_guardrail"] == "automated_sequence_approved"
     assert len(pitch["linkedin_pitch"]) <= 300
-    assert "Paseo MS" in pitch["whatsapp_script"]
+    assert "Bajío Hub" in pitch["whatsapp_script"]
 
 
 def test_generate_b2b_pitch_synthetic_high_risk_blocked():
@@ -206,7 +210,7 @@ def test_solve_tsp_route_sequence_optimization():
         "lon": [-101.4400, -101.4170, -101.4200, -101.4300],
         "chronotype": ["Office_Standard_8AM", "Early_Bird_6AM", "Office_Standard_8AM", "Early_Bird_6AM"]
     })
-    start_lat, start_lon = 20.9538, -101.4161 # Paseo MS
+    start_lat, start_lon = 20.9538, -101.4161 # Target anchor hub
     
     routed = solve_tsp_route_sequence(sites, start_lat, start_lon)
     
@@ -267,6 +271,7 @@ def calculate_b2b_emv(
     distance_km: float,
     chronotype: str,
     ticket_mxn: float = 65.0,
+    group_order_ticket_mxn: float = 174.31,
     working_days: int = 20
 ) -> dict:
     """Calculates unified propensity (0-100) and Expected Monthly Coffee Revenue in MXN."""
@@ -302,9 +307,9 @@ def assign_offer_playbook(account: dict) -> str:
     dist = float(account.get("distance_km") or 1.5)
     
     if (scian in ["31", "32", "33", "23"] or hc >= 100):
-        return "Playbook A: Convenio Corporativo & Coffee Box Juntas Matutinas (7:00-9:00 AM) con CFDI 4.0"
+        return "Playbook A: Convenio Corporativo & Coffee Box Juntas Matutinas (7:00-9:00 AM) vía Rappi con CFDI 4.0"
     elif dist <= 2.0 and scian in ["52", "62", "54"]:
-        return "Playbook B: Membresía Vecino Corporativo Paseo MS (15% Off 7-10 AM + Delivery Express)"
+        return "Playbook B: Membresía Vecino Corporativo (15% Off 7-10 AM en App/Sucursal + Rappi B2B)"
     elif scian == "72":
         return "Playbook C: Alianza Huésped Ejecutivo / Barra de Café Especialidad para Eventos"
     else:
@@ -321,7 +326,7 @@ def test_bidirectional_schema_normalizer():
         "telefono": ["4721234567"],
         "nombre_estab": ["PLANTA AUTOMOTRIZ"],
         "raz_social": ["AUTOMOTRIZ DEL BAJIO SA DE CV"],
-        "mun": ["Silao de la Victoria"]
+        "mun": ["Leon de los Aldama"]
     })
     normalized = normalize_stage3_schema(df_spanish)
     assert "scian_code" in normalized.columns
