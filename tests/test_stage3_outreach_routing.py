@@ -223,3 +223,149 @@ def test_solve_tsp_route_sequence_optimization():
     cum_dists = routed["cumulative_distance_km"].to_list()
     assert cum_dists == sorted(cum_dists)
     assert cum_dists[-1] > cum_dists[0]
+
+
+def normalize_stage3_schema(df: pl.DataFrame) -> pl.DataFrame:
+    """Standardizes English Stage-02 schema with bidirectional legacy Spanish fallback."""
+    mapping = {
+        "codigo_act": "scian_code",
+        "per_ocu": "employee_strata",
+        "correoelec": "email",
+        "www": "website",
+        "telefono": "phone",
+        "nombre_estab": "business_name",
+        "raz_social": "legal_name",
+        "mun": "municipality",
+    }
+    rename_dict = {}
+    for old_col, new_col in mapping.items():
+        if old_col in df.columns and new_col not in df.columns:
+            rename_dict[old_col] = new_col
+    res = df.rename(rename_dict) if rename_dict else df
+    return res
+
+
+def impute_morning_chronotype_4digit(scian_code: str | None, academic_level: str | None = None) -> str:
+    """Imputes 7:00-10:00 AM coffee shift window using 4-digit SCIAN and academic tier."""
+    code = str(scian_code or "").strip()
+    prefix2 = code[:2]
+    prefix3 = code[:3]
+    prefix4 = code[:4]
+
+    if prefix4 in ["3361", "3362", "3363", "5413"] or prefix2 in ["31", "32", "33", "23"] or prefix3 in ["484", "493"]:
+        return "Turno_Ingenieria_630_730AM"
+    if prefix3 in ["621", "622", "623"] or prefix2 == "62":
+        return "Guardia_Medica_700_830AM"
+    if prefix4 in ["5415", "5221", "7211"] or prefix2 in ["52", "55"] or academic_level == "corporate_professional":
+        return "Ejecutivo_Oficina_800_930AM"
+    return "Apertura_Comercial_900_1000AM"
+
+
+def calculate_b2b_emv(
+    headcount: int,
+    b2b_5d_score: float,
+    distance_km: float,
+    chronotype: str,
+    ticket_mxn: float = 65.0,
+    working_days: int = 20
+) -> dict:
+    """Calculates unified propensity (0-100) and Expected Monthly Coffee Revenue in MXN."""
+    # Proximity decay factor
+    decay = max(0.4, 1.0 - (distance_km / 8.0))
+    # Chronotype alignment weight
+    chrono_weights = {
+        "Turno_Ingenieria_630_730AM": 0.25,
+        "Ejecutivo_Oficina_800_930AM": 0.30,
+        "Guardia_Medica_700_830AM": 0.28,
+        "Apertura_Comercial_900_1000AM": 0.15,
+    }
+    capture_rate = min(0.35, max(0.05, chrono_weights.get(chronotype, 0.15) * decay))
+    
+    # White collar headcount estimate
+    white_collar_est = max(1, round(headcount * 0.40)) if headcount > 50 else max(1, headcount)
+    monthly_rev_mxn = round(white_collar_est * capture_rate * ticket_mxn * working_days, 2)
+    
+    # Normalized Propensity Score 0 to 100
+    propensity_score = round(min(100.0, max(10.0, (b2b_5d_score * 8.5) + (capture_rate * 80.0))), 1)
+    
+    return {
+        "b2b_propensity_score": propensity_score,
+        "capture_rate": round(capture_rate, 3),
+        "est_monthly_coffee_rev_mxn": monthly_rev_mxn,
+    }
+
+
+def assign_offer_playbook(account: dict) -> str:
+    """Assigns the 4-tier B2B Coffee Offer Playbook."""
+    hc = int(account.get("total_est_employees_midpoint") or 10)
+    scian = str(account.get("scian_code", ""))[:2]
+    dist = float(account.get("distance_km") or 1.5)
+    
+    if (scian in ["31", "32", "33", "23"] or hc >= 100):
+        return "Playbook A: Convenio Corporativo & Coffee Box Juntas Matutinas (7:00-9:00 AM) con CFDI 4.0"
+    elif dist <= 2.0 and scian in ["52", "62", "54"]:
+        return "Playbook B: Membresía Vecino Corporativo Paseo MS (15% Off 7-10 AM + Delivery Express)"
+    elif scian == "72":
+        return "Playbook C: Alianza Huésped Ejecutivo / Barra de Café Especialidad para Eventos"
+    else:
+        return "Playbook D: Servicio Ágil de Café de Especialidad para Oficinas y Despachos"
+
+
+def test_bidirectional_schema_normalizer():
+    # Spanish INEGI legacy schema
+    df_spanish = pl.DataFrame({
+        "codigo_act": ["336110"],
+        "per_ocu": ["251 y más personas"],
+        "correoelec": ["planta@auto.com"],
+        "www": ["www.auto.com"],
+        "telefono": ["4721234567"],
+        "nombre_estab": ["PLANTA AUTOMOTRIZ"],
+        "raz_social": ["AUTOMOTRIZ DEL BAJIO SA DE CV"],
+        "mun": ["Silao de la Victoria"]
+    })
+    normalized = normalize_stage3_schema(df_spanish)
+    assert "scian_code" in normalized.columns
+    assert "employee_strata" in normalized.columns
+    assert "email" in normalized.columns
+    assert "website" in normalized.columns
+    assert "phone" in normalized.columns
+    assert "business_name" in normalized.columns
+    assert "legal_name" in normalized.columns
+    assert "municipality" in normalized.columns
+    assert normalized["scian_code"][0] == "336110"
+
+
+def test_4digit_scian_morning_chronotype_imputer():
+    assert impute_morning_chronotype_4digit("336110") == "Turno_Ingenieria_630_730AM"
+    assert impute_morning_chronotype_4digit("541330") == "Turno_Ingenieria_630_730AM"
+    assert impute_morning_chronotype_4digit("622110") == "Guardia_Medica_700_830AM"
+    assert impute_morning_chronotype_4digit("541510") == "Ejecutivo_Oficina_800_930AM"
+    assert impute_morning_chronotype_4digit("522110") == "Ejecutivo_Oficina_800_930AM"
+    assert impute_morning_chronotype_4digit("721111") == "Ejecutivo_Oficina_800_930AM"
+    assert impute_morning_chronotype_4digit("461110") == "Apertura_Comercial_900_1000AM"
+
+
+def test_b2b_propensity_and_monthly_revenue_emv():
+    emv_res = calculate_b2b_emv(
+        headcount=350,
+        b2b_5d_score=8.5,
+        distance_km=1.2,
+        chronotype="Turno_Ingenieria_630_730AM",
+        ticket_mxn=65.0,
+        working_days=20
+    )
+    assert emv_res["b2b_propensity_score"] >= 80.0
+    assert emv_res["est_monthly_coffee_rev_mxn"] > 5000.0
+
+
+def test_b2b_offer_playbook_assignment():
+    acc_plant = {"total_est_employees_midpoint": 350, "scian_code": "3361", "distance_km": 3.5}
+    acc_bank = {"total_est_employees_midpoint": 25, "scian_code": "5221", "distance_km": 0.8}
+    acc_hotel = {"total_est_employees_midpoint": 40, "scian_code": "7211", "distance_km": 1.1}
+    acc_office = {"total_est_employees_midpoint": 10, "scian_code": "5611", "distance_km": 3.0}
+
+    assert "Playbook A" in assign_offer_playbook(acc_plant)
+    assert "Playbook B" in assign_offer_playbook(acc_bank)
+    assert "Playbook C" in assign_offer_playbook(acc_hotel)
+    assert "Playbook D" in assign_offer_playbook(acc_office)
+
