@@ -233,32 +233,38 @@ def cluster_corporate_entities(df: pl.DataFrame, fuzzy_threshold: float = 0.85) 
         if root_i != root_j:
             parent_map[root_j] = root_i
 
+    FREE_DOMAINS = {"gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "live.com.mx", "prodigy.net.mx", "gob.mx"}
+
     for i in range(n):
-        rec_i = records[i]
-        leg_i = rec_i["norm_legal"]
-        pcomm_i = rec_i["parent_name"]
+        ri = records[i]
+        legi = (ri.get("parent_legal") or ri.get("norm_legal") or "").strip().upper()
+        pcommi = (ri.get("parent_name") or ri.get("norm_name") or "").strip().upper()
+        emi = (ri.get("email") or ri.get("correoelec") or "").strip().lower()
+        domi = emi.split("@")[1] if ("@" in emi and emi.split("@")[1] not in FREE_DOMAINS) else ""
 
         for j in range(i + 1, n):
-            rec_j = records[j]
-            leg_j = rec_j["norm_legal"]
-            pcomm_j = rec_j["parent_name"]
+            rj = records[j]
+            legj = (rj.get("parent_legal") or rj.get("norm_legal") or "").strip().upper()
+            pcommj = (rj.get("parent_name") or rj.get("norm_name") or "").strip().upper()
+            emj = (rj.get("email") or rj.get("correoelec") or "").strip().lower()
+            domj = emj.split("@")[1] if ("@" in emj and emj.split("@")[1] not in FREE_DOMAINS) else ""
 
-            is_match = False
-            # 1. Exact legal name match (if not empty and not generic and len >= 5)
-            if leg_i and leg_j and leg_i == leg_j and len(leg_i) >= 5 and leg_i not in generic_stop:
-                is_match = True
-            # 2. Strong fuzzy match on legal name (>= 90)
-            elif leg_i and leg_j and len(leg_i) >= 6 and len(leg_j) >= 6 and leg_i not in generic_stop and leg_j not in generic_stop:
-                if fuzz.WRatio(leg_i, leg_j) >= 90.0:
-                    is_match = True
-            # 3. Commercial parent match
-            elif pcomm_i and pcomm_j and len(pcomm_i) >= 5 and len(pcomm_j) >= 5 and pcomm_i not in generic_stop and pcomm_j not in generic_stop:
-                if pcomm_i == pcomm_j:
-                    is_match = True
-                elif fuzz.WRatio(pcomm_i, pcomm_j) >= (fuzzy_threshold * 100.0):
-                    is_match = True
+            match = False
+            # 1. Exact parent legal or parent commercial name match
+            if legi and legj and legi == legj and len(legi) >= 5 and legi not in generic_stop:
+                match = True
+            elif pcommi and pcommj and pcommi == pcommj and len(pcommi) >= 5 and pcommi not in generic_stop:
+                match = True
+            # 2. Shared corporate email or corporate domain (merges Lear, Bodycote, Hotsson/Milenium)
+            elif emi and emj and emi == emj:
+                match = True
+            elif domi and domj and domi == domj and not any(k in domi for k in ["edu.mx", "org.mx"]):
+                match = True
+            # 3. High-confidence RapidFuzz match on stripped parent legal names
+            elif legi and legj and len(legi) >= 6 and len(legj) >= 6 and (fuzz.WRatio(legi, legj) / 100.0) >= fuzzy_threshold:
+                match = True
 
-            if is_match:
+            if match:
                 union(i, j)
 
     from collections import defaultdict
@@ -849,5 +855,65 @@ def test_canonical_account_separation():
     assert aumovio_acc["site_count"] == 2
     assert aumovio_acc["total_est_employees_midpoint"] == 425
     assert aumovio_acc["consolidated_payroll_mxn"] == 4250000.0
+
+
+def test_corporate_email_domain_unioning():
+    df = pl.DataFrame({
+        "clee": ["11037010", "11037011", "11037012", "11037013"],
+        "nombre_estab": ["CONSORCIO INDUSTRIAL MEXICANO", "LEAR SILAO", "PAPELERIA EL SOL", "PAPELERIA LA LUNA"],
+        "raz_social": ["CONSORCIO INDUSTRIAL MEXICANO DE AUTOPARTES S.A. DE C.V.", "LEAR CORPORATION MEXICO S. DE R.L. DE C.V.", "PAPELERIA EL SOL S.A. DE C.V.", "PAPELERIA LA LUNA S.A. DE C.V."],
+        "lat": [20.950, 20.955, 20.940, 20.942],
+        "lon": [-101.410, -101.415, -101.400, -101.402],
+        "email": ["mmendoza01@lear.com", "mmendoza01@lear.com", "sol@gmail.com", "luna@gmail.com"],
+        "b2b_status": ["target", "target", "no_target", "no_target"],
+        "b2b_5d_score": [8.0, 7.9, 2.0, 2.1],
+        "estimated_headcount": [350, 350, 3, 2],
+        "estimated_monthly_payroll_mxn": [10500000.0, 10500000.0, 30000.0, 20000.0],
+    })
+    clustered = cluster_corporate_entities(df)
+    c_lear1 = clustered.filter(pl.col("clee") == "11037010").to_dicts()[0]
+    c_lear2 = clustered.filter(pl.col("clee") == "11037011").to_dicts()[0]
+    c_sol = clustered.filter(pl.col("clee") == "11037012").to_dicts()[0]
+    c_luna = clustered.filter(pl.col("clee") == "11037013").to_dicts()[0]
+
+    # Shared non-free corporate email / domain unifies Lear plants
+    assert c_lear1["canonical_entity_id"] == c_lear2["canonical_entity_id"]
+    assert c_lear1["campus_site_count"] == 2
+
+    # Free email (gmail.com) must NOT unify unrelated entities
+    assert c_sol["canonical_entity_id"] != c_luna["canonical_entity_id"]
+    assert c_sol["campus_site_count"] == 1
+    assert c_luna["campus_site_count"] == 1
+
+
+def test_campus_summary_b2b_filtering():
+    df_clustered = pl.DataFrame({
+        "canonical_entity_id": ["ent_auto", "ent_auto", "ent_walmart", "ent_walmart"],
+        "canonical_parent_name": ["AUTO GROUP", "AUTO GROUP", "NUEVA WAL MART", "NUEVA WAL MART"],
+        "business_name": ["PLANTA 1", "PLANTA 2", "WALMART SUPER", "WALMART EXPRESS"],
+        "campus_site_count": [2, 2, 2, 2],
+        "b2b_status": ["target", "target", "no_target", "no_target"],
+        "total_est_employees_midpoint": [500, 500, 300, 300],
+        "campus_consolidated_payroll_mxn": [15000000.0, 15000000.0, 4500000.0, 4500000.0],
+        "inherited_email": ["contact@autogroup.com", "contact@autogroup.com", "info@walmart.com", "info@walmart.com"],
+        "inherited_website": ["autogroup.com", "autogroup.com", "walmart.com", "walmart.com"],
+    })
+    campus_summary = (
+        df_clustered.filter((pl.col("campus_site_count") > 1) & (pl.col("b2b_status") != "no_target"))
+        .group_by(["canonical_entity_id", "canonical_parent_name"])
+        .agg([
+            pl.len().alias("sites"),
+            pl.col("business_name").str.join(" | ").alias("plantas"),
+            pl.col("total_est_employees_midpoint").first().alias("total_headcount"),
+            pl.col("campus_consolidated_payroll_mxn").first().alias("nomina_total"),
+            pl.col("inherited_email").first().alias("email_campus"),
+            pl.col("inherited_website").first().alias("web_campus"),
+        ])
+        .sort("nomina_total", descending=True)
+    )
+    entities = campus_summary["canonical_parent_name"].to_list()
+    assert "AUTO GROUP" in entities
+    assert "NUEVA WAL MART" not in entities
+
 
 
