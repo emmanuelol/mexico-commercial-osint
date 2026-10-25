@@ -2,6 +2,7 @@
 """
 Migrates cell functions from Jupyter Notebooks to src/mx_osint/ modules based on
 '# MIGRATES TO: <target_path>::<symbol_name>' comments.
+Uses AST extraction to ensure clean, importable Python modules free of interactive notebook code.
 """
 import argparse
 import ast
@@ -12,10 +13,21 @@ import sys
 
 MIGRATE_PATTERN = re.compile(r"#\s*MIGRATES\s*TO:\s*([^\s:]+)::([^\s]+)")
 
+# Variables/expressions representing interactive notebook execution to exclude
+EXCLUDE_ASSIGN_TARGETS = {
+    "df", "raw_df", "df_prep", "df_sites", "df_stage1", "df_canonical", "df_field_routed",
+    "top20", "top30_export", "top_routes", "top_accounts", "email_ready",
+    "m_act", "pub_agg", "pub_payload", "settings", "raw_zip", "records", "n",
+    "parent_map", "clusters", "lats", "lons", "emvs", "eval_rows", "t4_rows", "t5_rows",
+    "r1", "r2", "r3", "sites_with_emv", "route_names", "playbook_results", "emv_results",
+    "aumovio_1", "aumovio_2", "pape"
+}
+
+
 def extract_cells_from_notebook(notebook_path: Path):
     with open(notebook_path, "r", encoding="utf-8") as f:
         nb = json.load(f)
-    
+
     extracted = []
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
@@ -32,6 +44,99 @@ def extract_cells_from_notebook(notebook_path: Path):
                 "source": source
             })
     return extracted
+
+
+def clean_cell_source_with_ast(source: str, symbol_name: str) -> str:
+    """Extracts only imports, constants, classes, and functions from cell source."""
+    # Special wrap for prospect_report export_dual if not already a FunctionDef
+    if symbol_name == "export_dual" and "def export_dual" not in source:
+        clean_lines = []
+        for line in source.splitlines():
+            if line.startswith("# MIGRATES TO:"):
+                continue
+            if line.startswith("print("):
+                continue
+            clean_lines.append("    " + line)
+        body = "\n".join(clean_lines)
+        return f'''from pathlib import Path
+import json
+import polars as pl
+
+def export_dual(df_canonical: pl.DataFrame, df_field_routed: pl.DataFrame, base_dirs: list = None) -> dict:
+    """Exports private CRM tables and public zero-PII aggregates."""
+    if base_dirs is None:
+        base_dirs = [Path("data"), Path("../data"), Path("notebooks/data")]
+    
+    top30_export = None
+    email_ready = None
+    pub_payload = None
+
+{body}
+
+    return {{
+        "top30_count": len(top30_export) if top30_export is not None else 0,
+        "email_ready_count": len(email_ready) if email_ready is not None else 0,
+        "routed_sites_count": len(df_field_routed),
+        "public_payload": pub_payload,
+    }}
+'''
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+
+    clean_nodes = []
+    for node in tree.body:
+        # Keep all imports
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            clean_nodes.append(node)
+        # Keep class and function definitions
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            clean_nodes.append(node)
+        # Keep module-level constant assignments and type annotations
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            target_names = []
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        target_names.append(t.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name):
+                    target_names.append(node.target.id)
+
+            # Only keep module-level constants (PEP8 uppercase or dunder/private)
+            if target_names and all(t.isupper() or t.startswith("__") for t in target_names):
+                clean_nodes.append(node)
+        # Exclude bare expressions (print, display, loops over notebook datasets)
+
+    if not clean_nodes:
+        return source
+
+    tree.body = clean_nodes
+    unparsed = ast.unparse(tree)
+
+    missing_imports = []
+    if "pl." in unparsed and "import polars" not in unparsed:
+        missing_imports.append("import polars as pl")
+    if "np." in unparsed and "import numpy" not in unparsed:
+        missing_imports.append("import numpy as np")
+    if "Path(" in unparsed and "from pathlib import Path" not in unparsed and "import Path" not in unparsed:
+        missing_imports.append("from pathlib import Path")
+    if "math." in unparsed and "import math" not in unparsed:
+        missing_imports.append("import math")
+    if "json." in unparsed and "import json" not in unparsed:
+        missing_imports.append("import json")
+    if "re." in unparsed and "import re" not in unparsed:
+        missing_imports.append("import re")
+    if "settings." in unparsed and "Settings" not in unparsed:
+        missing_imports.append("from mx_osint.config import Settings\nsettings = Settings()")
+
+    if missing_imports:
+        unparsed = "\n".join(missing_imports) + "\n\n" + unparsed
+
+    return unparsed
+
 
 def main():
     parser = argparse.ArgumentParser(description="Migrate notebook cells to production modules.")
@@ -56,6 +161,8 @@ def main():
         all_cells.extend(extract_cells_from_notebook(nb_file))
 
     print(f"Found {len(all_cells)} migratable cell(s).")
+    touched_files = set()
+
     for item in all_cells:
         target_file = Path(item["target_path"])
         print(f"  [{item['notebook']}] -> {item['target_path']} :: {item['symbol']}")
@@ -65,16 +172,27 @@ def main():
             if not init_file.exists():
                 init_file.touch()
 
-            if target_file.exists() and not args.force:
-                print(f"    Target {target_file} exists. Skipping (use --force to overwrite).")
+            # For config.py, preserve existing clean canonical implementation
+            if target_file == Path("src/mx_osint/config.py") and target_file.exists():
+                print(f"    Preserving canonical {target_file}")
                 continue
 
-            with open(target_file, "a", encoding="utf-8") as f:
-                f.write(f"\n\n# Migrated from {item['notebook']} symbol {item['symbol']}\n")
-                f.write(item["source"] + "\n")
-            print(f"    Appended to {target_file}")
+            cleaned_code = clean_cell_source_with_ast(item["source"], item["symbol"])
+
+            if target_file not in touched_files:
+                mode = "w" if (args.force or not target_file.exists()) else "a"
+                touched_files.add(target_file)
+            else:
+                mode = "a"
+
+            with open(target_file, mode, encoding="utf-8") as f:
+                if mode == "a":
+                    f.write(f"\n\n# Migrated from {item['notebook']} symbol {item['symbol']}\n")
+                f.write(cleaned_code.strip() + "\n")
+            print(f"    {'Overwrote' if mode == 'w' else 'Appended to'} {target_file}")
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

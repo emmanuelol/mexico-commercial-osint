@@ -115,3 +115,84 @@ def test_config_settings():
     )
     assert settings.INEGI_STATE_CODE == "11"
     assert settings.RADIUS_KM == 3.0
+    assert hasattr(settings, "ANCHOR_LABEL")
+    assert "Bajío Hub" in settings.ANCHOR_LABEL
+    assert hasattr(settings, "PROCESSED_DIR")
+
+
+def test_activation_contracts():
+    from mx_osint.activation.contracts import (
+        CouponSpec,
+        OutreachPayload,
+        DryRunPromoProvider,
+        DryRunOutreachDispatcher,
+    )
+
+    # Valid coupon
+    spec = CouponSpec(
+        code="VECINO15",
+        coupon_type="discount",
+        description="local_partners",
+        discount_pct=15.0,
+        store_id=525,
+    )
+    assert spec.code == "VECINO15"
+    assert spec.discount_pct == 15.0
+
+    # Provider dry run
+    provider = DryRunPromoProvider(max_discount_pct=15.0)
+    res = provider.provision_coupon(spec)
+    assert res["status"] == "PROVISIONED_DRY_RUN"
+    assert provider.verify_coupon("VECINO15") is True
+    assert provider.verify_coupon("UNKNOWN") is False
+
+    # Dispatcher dry run
+    dispatcher = DryRunOutreachDispatcher()
+    payload = OutreachPayload(
+        canonical_entity_id="ent_test",
+        recipient_email="contacto@empresa.com",
+        email_subject="Convenio Corporativo",
+        email_body="Cuerpo del mensaje",
+        chronotype_key="Ejecutivo_Oficina_800_930AM",
+        coupon_code="VECINO15",
+        contact_risk="low",
+        email_confidence="high",
+    )
+    d_res = dispatcher.dispatch(payload)
+    assert d_res["status"] == "DISPATCHED_DRY_RUN"
+    assert len(dispatcher.dispatched) == 1
+
+    # Blocked by guardrail
+    blocked_payload = OutreachPayload(
+        canonical_entity_id="ent_test2",
+        recipient_email="contacto@sintetizado.com",
+        email_subject="Test",
+        email_body="Test",
+        chronotype_key="Turno_630AM",
+        contact_risk="high",
+        email_confidence="low",
+    )
+    with pytest.raises(ValueError, match="Outreach blocked by guardrail"):
+        dispatcher.dispatch(blocked_payload)
+
+
+def test_migrated_modules_imports():
+    import mx_osint.models.denue
+    import mx_osint.sources.denue_loader
+    import mx_osint.sources.osm_loader
+    import mx_osint.scoring.b2b_qualifier
+    import mx_osint.scoring.empirical_adaboost_scorer
+    import mx_osint.resolution.spatial_blocker
+    import mx_osint.resolution.mex_name_normalizer
+    import mx_osint.resolution.contact_enricher
+    import mx_osint.enrichment.chronotype_imputer
+    import mx_osint.enrichment.digital_maturity
+    import mx_osint.enrichment.b2b_propensity
+    import mx_osint.activation.channel_classifier
+    import mx_osint.reporting.prospect_report
+
+    assert hasattr(mx_osint.models.denue, "DENUEBusiness")
+    assert hasattr(mx_osint.sources.denue_loader, "read_denue_csv")
+    assert hasattr(mx_osint.enrichment.b2b_propensity, "calculate_b2b_emv_record")
+    assert hasattr(mx_osint.reporting.prospect_report, "export_dual")
+

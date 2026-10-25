@@ -27,3 +27,11 @@ class Settings(BaseSettings):
         default=Path("data/raw"),
         description="Directory for caching downloaded datasets"
     )
+    PROCESSED_DIR: Path = Field(
+        default=Path("data/processed"),
+        description="Directory for processed output datasets"
+    )
+    ANCHOR_LABEL: str = Field(
+        default="Anchor Store — Bajío Hub",
+        description="Target anchor label"
+    )
