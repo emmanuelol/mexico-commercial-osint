@@ -465,6 +465,137 @@ def evaluate_stage2_actionability(rec: dict) -> dict:
     }
 
 
+STRATA_MIDPOINT = {
+    "0 a 5 personas": 3,
+    "6 a 10 personas": 8,
+    "11 a 30 personas": 20,
+    "31 a 50 personas": 40,
+    "51 a 100 personas": 75,
+    "101 a 250 personas": 175,
+    "251 y más personas": 350,
+}
+
+
+def map_employee_strata_midpoint(strata: str | None) -> int:
+    """Exact mapping of DENUE employee strata to realistic headcount midpoint."""
+    if not strata or not isinstance(strata, str):
+        return 0
+    clean = strata.strip().lower()
+    for key, val in STRATA_MIDPOINT.items():
+        if key in clean or clean in key:
+            return val
+    if "251" in clean:
+        return 350
+    if "101" in clean:
+        return 175
+    if "51" in clean:
+        return 75
+    if "31" in clean:
+        return 40
+    if "11" in clean:
+        return 20
+    if "6" in clean:
+        return 8
+    if "0" in clean or "1" in clean:
+        return 3
+    return 0
+
+
+def evaluate_contact_confidence(contact: str | None, source: str = "direct_denue") -> dict:
+    """Assigns rigorous provenance, confidence score, and risk flags to B2B contacts."""
+    if not contact or not isinstance(contact, str) or contact.strip() in ["", "-", "none"]:
+        return {
+            "email_source": "none",
+            "email_confidence": "none",
+            "contact_verified": False,
+            "contact_risk": "low",
+        }
+    if source == "direct_denue":
+        return {
+            "email_source": "direct_denue",
+            "email_confidence": "high",
+            "contact_verified": True,
+            "contact_risk": "low",
+        }
+    if source == "scraped_website":
+        return {
+            "email_source": "scraped_website",
+            "email_confidence": "medium-high",
+            "contact_verified": True,
+            "contact_risk": "low",
+        }
+    if source == "campus_inherited":
+        return {
+            "email_source": "campus_inherited",
+            "email_confidence": "medium",
+            "contact_verified": False,
+            "contact_risk": "medium",
+        }
+    if source == "synthesized_domain":
+        return {
+            "email_source": "synthesized_domain",
+            "email_confidence": "low",
+            "contact_verified": False,
+            "contact_risk": "high",
+        }
+    return {
+        "email_source": source,
+        "email_confidence": "low",
+        "contact_verified": False,
+        "contact_risk": "medium",
+    }
+
+
+def classify_workforce_academic_level(wage_mxn: float | None, degree_share: float | None) -> str:
+    """Classifies establishment workforce academic / technical buyer tier."""
+    wage = float(wage_mxn or 0.0)
+    share = float(degree_share or 0.0)
+    if share >= 0.60 and wage >= 25000:
+        return "high_automation_engineering"
+    elif share >= 0.35 and wage >= 18000:
+        return "corporate_professional"
+    elif share >= 0.20 or wage >= 15000:
+        return "specialized_technical"
+    else:
+        return "traditional_labor"
+
+
+def build_canonical_action_master(df_sites: pl.DataFrame) -> pl.DataFrame:
+    """Builds strictly deduplicated 1-row-per-corporate-entity master outreach table."""
+    act = df_sites.filter(pl.col("is_stage2_actionable") == True) if "is_stage2_actionable" in df_sites.columns else df_sites
+    
+    payroll_col = "est_monthly_payroll_mxn" if "est_monthly_payroll_mxn" in act.columns else (
+        "estimated_monthly_payroll_mxn" if "estimated_monthly_payroll_mxn" in act.columns else None
+    )
+
+    agg_exprs = [
+        pl.len().alias("site_count"),
+        pl.col("canonical_parent_name").first().alias("canonical_parent_name"),
+        pl.col("business_name").first().alias("primary_site_name"),
+        pl.col("b2b_status").first().alias("b2b_status"),
+        pl.col("b2b_5d_score").max().alias("max_b2b_5d_score"),
+        pl.col("est_employees_midpoint").sum().alias("total_est_employees_midpoint") if "est_employees_midpoint" in act.columns else pl.lit(0).alias("total_est_employees_midpoint"),
+        (pl.col(payroll_col).sum().alias("consolidated_payroll_mxn") if payroll_col else pl.lit(0.0).alias("consolidated_payroll_mxn")),
+        pl.col("actionable_channel").first().alias("best_contact_channel"),
+        pl.col("effective_contact").first().alias("effective_contact"),
+        pl.col("email_source").first().alias("email_source") if "email_source" in act.columns else pl.lit("unknown").alias("email_source"),
+        pl.col("email_confidence").first().alias("email_confidence") if "email_confidence" in act.columns else pl.lit("low").alias("email_confidence"),
+    ]
+
+    return act.group_by("canonical_entity_id").agg(agg_exprs).sort("max_b2b_5d_score", descending=True)
+
+
+def build_site_action_list(df_sites: pl.DataFrame) -> pl.DataFrame:
+    """Builds physical site-level routing table for field visits and maps."""
+    act = df_sites.filter(pl.col("is_stage2_actionable") == True) if "is_stage2_actionable" in df_sites.columns else df_sites
+    return act.with_columns([
+        pl.when(pl.col("is_duplicate") == False)
+        .then(pl.lit("primary_site"))
+        .otherwise(pl.lit("branch_secondary_site"))
+        .alias("role_in_campus")
+    ])
+
+
 def test_normalize_mexican_legal_suffixes():
     test_cases = [
         ("GRUPO INDUSTRIAL DEL BAJÍO S.A. DE C.V.", "GRUPO INDUSTRIAL DEL BAJIO"),
@@ -648,4 +779,75 @@ def test_evaluate_stage2_actionability():
     assert "Tier-1 Corporate Domain" in evaluate_stage2_actionability(rec3)["rescue_reason"]
 
     assert evaluate_stage2_actionability(rec4)["is_actionable"] is False
+
+
+def test_strata_midpoint_mapping():
+    assert map_employee_strata_midpoint("0 a 5 personas") == 3
+    assert map_employee_strata_midpoint("6 a 10 personas") == 8
+    assert map_employee_strata_midpoint("11 a 30 personas") == 20
+    assert map_employee_strata_midpoint("31 a 50 personas") == 40
+    assert map_employee_strata_midpoint("51 a 100 personas") == 75
+    assert map_employee_strata_midpoint("101 a 250 personas") == 175
+    assert map_employee_strata_midpoint("251 y más personas") == 350
+    assert map_employee_strata_midpoint("desconocido") == 0
+
+
+def test_contact_confidence_hierarchy():
+    # Direct DENUE email -> high confidence, low risk, verified
+    conf1 = evaluate_contact_confidence("juan@aumovio.com", source="direct_denue")
+    assert conf1["email_source"] == "direct_denue"
+    assert conf1["email_confidence"] == "high"
+    assert conf1["contact_verified"] is True
+    assert conf1["contact_risk"] == "low"
+
+    # Scraped visible email -> medium-high confidence
+    conf2 = evaluate_contact_confidence("info@ingcapricornio.mx", source="scraped_website")
+    assert conf2["email_source"] == "scraped_website"
+    assert conf2["email_confidence"] == "medium-high"
+    assert conf2["contact_verified"] is True
+
+    # Campus inherited email -> medium confidence, medium risk
+    conf3 = evaluate_contact_confidence("contacto@aumovio.com", source="campus_inherited")
+    assert conf3["email_source"] == "campus_inherited"
+    assert conf3["email_confidence"] == "medium"
+    assert conf3["contact_verified"] is False
+    assert conf3["contact_risk"] == "medium"
+
+    # Synthesized domain role inbox -> low confidence, high risk, unverified
+    conf4 = evaluate_contact_confidence("contacto@proinceautomatizacion.com", source="synthesized_domain")
+    assert conf4["email_source"] == "synthesized_domain"
+    assert conf4["email_confidence"] == "low"
+    assert conf4["contact_verified"] is False
+    assert conf4["contact_risk"] == "high"
+
+
+def test_canonical_account_separation():
+    df_sites = pl.DataFrame({
+        "clee": ["11037001", "11037002", "11037003"],
+        "business_name": ["AUMOVIO MATRIZ", "AUMOVIO PLANTA", "HOTSSON HOTEL"],
+        "canonical_entity_id": ["ent_aumovio", "ent_aumovio", "ent_hotsson"],
+        "canonical_parent_name": ["AUMOVIO MEXICO", "AUMOVIO MEXICO", "HOTEL HOTSSON"],
+        "b2b_status": ["target", "target", "partial"],
+        "is_rescued_partial": [False, False, True],
+        "is_duplicate": [False, True, False],
+        "is_stage2_actionable": [True, True, True],
+        "b2b_5d_score": [8.5, 8.2, 5.4],
+        "est_employees_midpoint": [350, 75, 175],
+        "est_monthly_payroll_mxn": [3500000.0, 750000.0, 1500000.0],
+        "effective_contact": ["contacto@aumovio.com", "contacto@aumovio.com", "rcgarcia@hotsson.com"],
+        "actionable_channel": ["Direct Email (Verified DENUE)", "Campus Inherited Email (Parent Entity)", "Direct Email (Rescued Tier-1 Corporate)"],
+        "email_source": ["direct_denue", "campus_inherited", "direct_denue"],
+        "email_confidence": ["high", "medium", "high"],
+    })
+    canon_master = build_canonical_action_master(df_sites)
+    site_list = build_site_action_list(df_sites)
+
+    # Exactly 2 canonical accounts vs 3 site locations
+    assert len(canon_master) == 2
+    assert len(site_list) == 3
+    aumovio_acc = canon_master.filter(pl.col("canonical_entity_id") == "ent_aumovio").to_dicts()[0]
+    assert aumovio_acc["site_count"] == 2
+    assert aumovio_acc["total_est_employees_midpoint"] == 425
+    assert aumovio_acc["consolidated_payroll_mxn"] == 4250000.0
+
 
