@@ -61,3 +61,12 @@ top_*_prospects.csv
 *silao*
 *TC-00*
 notebooks/data/
+
+# LLM export artifacts
+*_part_*_of_*.txt
+repository_export*.txt
+*targeted_context.md
+*local_codegraph.json
+*_export*.txt
+*.export.txt
+
