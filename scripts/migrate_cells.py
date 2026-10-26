@@ -145,10 +145,21 @@ def export_dual(df_canonical: pl.DataFrame, df_field_routed: pl.DataFrame, base_
         missing_imports.append("import requests")
     if "settings." in unparsed and "Settings" not in unparsed:
         missing_imports.append("from mx_osint.config import Settings\nsettings = Settings()")
+    if ("ANCHOR_LAT" in unparsed or "ANCHOR_LON" in unparsed) and not re.search(r"^\s*ANCHOR_LAT\b", unparsed, re.MULTILINE):
+        missing_imports.append(
+            "from mx_osint.config import Settings as _Settings\n"
+            "_s = _Settings()\n"
+            "ANCHOR_LAT, ANCHOR_LON = _s.TARGET_LAT, _s.TARGET_LON"
+        )
     if "STRATA_ORDER" in unparsed and "from mx_osint.models.denue" not in unparsed and not re.search(r"^\s*STRATA_ORDER\s*[:=]", unparsed, re.MULTILINE):
         missing_imports.append("from mx_osint.models.denue import STRATA_ORDER, STRATA_HEADCOUNT_MIDPOINT")
-    if "ANCHOR_LAT" in unparsed and not re.search(r"^\s*ANCHOR_LAT\b", unparsed, re.MULTILINE):
-        missing_imports.append("ANCHOR_LAT = 21.1221\nANCHOR_LON = -101.6826")
+    elif "STRATA_HEADCOUNT_MIDPOINT" in unparsed and "from mx_osint.models.denue" not in unparsed and not re.search(r"^\s*STRATA_HEADCOUNT_MIDPOINT\s*[:=]", unparsed, re.MULTILINE):
+        missing_imports.append("from mx_osint.models.denue import STRATA_HEADCOUNT_MIDPOINT")
+    if "STAGE2_CONFIG" in unparsed and not re.search(r"^\s*STAGE2_CONFIG\s*[:=]", unparsed, re.MULTILINE):
+        missing_imports.append(
+            'STAGE2_CONFIG = {"osm_match_radius_m": 50.0, "fuzzy_threshold": 0.85, '
+            '"partial_upgrade_score_threshold": 4.8, "min_headcount_corporate_partial": 31}'
+        )
     if "ddg_cache" in unparsed and not re.search(r"^\s*ddg_cache\s*[:=]", unparsed, re.MULTILINE):
         missing_imports.append("ddg_cache: dict[str, dict] = {}")
 

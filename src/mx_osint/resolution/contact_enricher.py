@@ -1,3 +1,5 @@
+STAGE2_CONFIG = {"osm_match_radius_m": 50.0, "fuzzy_threshold": 0.85, "partial_upgrade_score_threshold": 4.8, "min_headcount_corporate_partial": 31}
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import re

@@ -1,0 +1,41 @@
+name: Clean-Room & OSINT Pipeline CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  audit-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Enforce Clean-Room Blacklist Guardrail
+        run: bash scripts/check_blacklist.sh
+
+      - name: Verify Notebook-to-Module AST Migration
+        run: python scripts/migrate_cells.py --notebooks notebooks/ --target src/mx_osint/ --dry-run
+
+      - name: Lint with Ruff
+        run: ruff check src/ tests/ scripts/
+
+      - name: Run Pytest Suite with Coverage
+        run: pytest tests/ -v --cov=src/mx_osint --cov-report=term-missing

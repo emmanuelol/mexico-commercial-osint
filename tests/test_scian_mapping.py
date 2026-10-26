@@ -227,4 +227,13 @@ def test_migrated_standalone_callability():
     assert "Paseo MS" not in doc
     assert "target anchor" in doc
 
+    # Test standalone contact_enricher and empirical_adaboost_scorer constants
+    import mx_osint.resolution.contact_enricher as ce
+    assert hasattr(ce, "STAGE2_CONFIG")
+    assert "partial_upgrade_score_threshold" in ce.STAGE2_CONFIG
+
+    import mx_osint.scoring.empirical_adaboost_scorer as eas
+    assert hasattr(eas, "STRATA_HEADCOUNT_MIDPOINT")
+    assert "11 a 30 personas" in eas.STRATA_HEADCOUNT_MIDPOINT
+
 

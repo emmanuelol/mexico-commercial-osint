@@ -1,5 +1,6 @@
 from mx_osint.config import Settings
 settings = Settings()
+from mx_osint.models.denue import STRATA_HEADCOUNT_MIDPOINT
 
 import math
 import numpy as np
