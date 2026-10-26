@@ -1,98 +1,154 @@
-# mexico-commercial-osint
+# 🇲🇽 mexico-commercial-osint (`mx_osint`)
 
-Commercial OSINT, Geospatial Entity Resolution, and B2B Lead Scoring toolkit engineered specifically for Mexican economic datasets (INEGI DENUE, SCIAN Mexico taxonomy, and Mexican legal entity suffixes).
+[![CI Pipeline](https://github.com/your-org/mexico-commercial-osint/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](pyproject.toml)
 
-Optimized for **CPU-only execution** using **Polars**, **RapidFuzz**, and **DuckDB**, without heavyweight PyTorch/CUDA dependencies.
+**`mexico-commercial-osint`** is a production-grade Open-Source Intelligence (OSINT) entity resolution, enrichment, and B2B propensity scoring engine tailored for the Mexican commercial ecosystem. 
+
+By fusing official national statistical registries (**INEGI DENUE** & **SCIAN** North American Industry Classification codes) with crowd-sourced geospatial telemetry (**OpenStreetMap**), `mx_osint` transforms noisy, fragmented public directories into high-confidence, compliance-first commercial graphs.
+
+---
+
+## 🧠 Why OSINT? And Why Does It Matter for Mexican B2B Data?
+
+### What is Commercial OSINT?
+**Open-Source Intelligence (OSINT)** is the discipline of collecting, correlating, and analyzing publicly available data sources to produce actionable intelligence. Unlike grey-hat web scraping or purchasing opaque third-party broker lists, engineering-driven OSINT relies strictly on **authoritative, legally open datasets** (open government data, public cartography, and statutory registries) governed by strict data contracts and provenance tracking.
+
+### Why Follow an OSINT Architecture in Mexico?
+Engineers building B2B growth, credit underwriting, logistics, or retail expansion pipelines in Mexico immediately hit three structural walls:
+1. **High Commercial Informality & Churn:** A massive percentage of Mexican SMBs (*PyMEs*) operate without corporate websites or LinkedIn footprints, making US-centric enrichment APIs (Clearbit, ZoomInfo, Apollo) blind to local reality.
+2. **Noisy & Disjointed Public Registries:** INEGI’s **DENUE** (*Directorio Estadístico Nacional de Unidades Económicas*) tracks over 5 million active businesses with granular **SCIAN** codes and employee headcount brackets, but often lacks modern digital contact channels or operating hours. Conversely, **OpenStreetMap (OSM)** captures ground-truth POIs, transit nodes, and opening hours, but lacks legal corporate taxonomy.
+3. **Strict Regulatory Boundaries (LFPDPPP):** Mexico’s *Ley Federal de Protección de Datos Personales en Posesión de los Particulares* imposes heavy penalties for processing non-consensual personal PII. 
+
+**Our Solution:** `mx_osint` bridges this gap legally and deterministically. By resolving entities across DENUE and OSM using spatial blocking and Mexican-specific phonetic/lexical normalization, we impute operational chronotypes, digital maturity, and B2B readiness **using 100% open data and zero private PII**.
+
+---
+
+## 🏗️ System Architecture & Pipeline Stages
 
 ```mermaid
-flowchart TD
-    subgraph S1["01_data_ingest.ipynb"]
-        A["INEGI DENUE CSV (latin1)"] --> B["Vectorized Haversine Filter"]
-        B --> C["Employee Strata Filter"]
-        C --> D["Raw Parquet Cache"]
+graph LR
+    subgraph Stage 1: Ingest & Contracts
+        A[INEGI DENUE Parquet] --> C(Data Contract Validator)
+        B[OpenStreetMap GeoJSON] --> C
     end
 
-    subgraph S2["02_entity_resolution.ipynb"]
-        D --> E["Mexican Legal Name Normalizer"]
-        E --> F["Geohash Spatial Blocker (Precision 6)"]
-        F --> G["RapidFuzz Block Matcher"]
-        G --> H["Resolved Entities Parquet"]
+    subgraph Stage 2: Entity Resolution
+        C --> D[Haversine Spatial Blocker]
+        D --> E[Mexican Legal Name Normalizer]
+        E --> F[Contact & POI Enricher]
     end
 
-    subgraph S3["03_scoring_export.ipynb"]
-        H --> I["SCIAN Chronotype Imputer"]
-        H --> J["Digital Maturity Classifier"]
-        I & J --> K["B2B Propensity Scorer"]
-        K --> L["Channel Classifier"]
-        L --> M["Private Export (Top Prospects CSV)"]
-        L --> N["Public Export (Aggregated Stats JSON)"]
+    subgraph Stage 3: Enrichment & Imputation
+        F --> G[SCIAN Chronotype Imputer]
+        F --> H[Digital Maturity Evaluator]
+        F --> I[B2B Propensity Mapper]
     end
 
-    S1 -.->|migrate_cells.py| M1["src/mx_osint/sources/denue_loader.py"]
-    S2 -.->|migrate_cells.py| M2["src/mx_osint/resolution/*.py"]
-    S3 -.->|migrate_cells.py| M3["src/mx_osint/enrichment/*.py & reporting/"]
+    subgraph Stage 4: Scoring & Activation
+        G & H & I --> J[Empirical AdaBoost Scorer]
+        J --> K[Channel Classifier & Routing]
+        K --> L[Prospect Report / Transit Heatmap]
+    end
 ```
 
-## Why Mexico-Specific?
+### Core Engineering Modules (`src/mx_osint/`)
 
-1. **INEGI DENUE Nuances:** Ingests official directory data distributed with latin1-compatible encoding, specific column headers (`clee`, `per_ocu`, `codigo_act`), and custom employee strata.
-2. **Mexican Legal Entity Suffixes:** Accurate normalization for legal corporate forms (`S.A.P.I. DE C.V.`, `S.A. DE C.V.`, `S. DE R.L. DE C.V.`, `S.C.`, `A.C.`, `S.A.B. DE C.V.`).
-3. **SCIAN Mexico Taxonomy:** Business activity classification mapped directly to operating chronotypes (e.g., 6 AM early morning shifts vs standard office vs continuous 24/7 operations) and B2B demand weights.
-4. **License Compliance:** Strict horizontal separation between Libre Uso MX (INEGI DENUE) and OpenStreetMap ODbL.
+| Submodule | Key Components | Engineering Problem Solved |
+| --- | --- | --- |
+| **`sources/`** | `denue_loader.py`, `osm_loader.py` | Standardized ingestion of INEGI DENUE snapshots and OSM spatial geometries into typed schemas. |
+| **`resolution/`** | `spatial_blocker.py`, `mex_name_normalizer.py`, `contact_enricher.py` | Avoids $O(N^2)$ pairwise comparisons via Haversine spatial blocking; strips Mexican corporate suffixes (*S.A. de C.V.*, *S. de R.L.*) and honorifics before fuzzy matching. |
+| **`enrichment/`** | `chronotype_imputer.py`, `digital_maturity.py`, `b2b_propensity.py` | Maps 6-digit SCIAN codes (`data_contracts/scian_*.json`) to operational time windows (morning/diurnal/nocturnal) and digital footprint tiers. |
+| **`scoring/`** | `b2b_qualifier.py`, `empirical_adaboost_scorer.py` | Combines employee strata, SCIAN propensity, and digital maturity into a calibrated B2B conversion score. |
+| **`activation/`** | `channel_classifier.py`, `contracts.py` | Routes qualified entities to optimal outreach channels (WhatsApp Business, Field Sales, Email, Cold Call) based on digital signals. |
+| **`viz/`** | `explorer.py`, `transit_heatmap.py` | Generates geospatial prospect density maps and commercial transit heatmaps. |
 
-## Quickstart
+---
+
+## 🚀 Quickstart (Zero External Data Required)
+
+This repository includes synthetic, privacy-safe fixtures (`fixtures/synthetic_denue_sample.parquet` and `fixtures/synthetic_osm_sample.geojson`) so you can run the entire resolution and scoring pipeline locally in seconds.
+
+### 1. Installation
 
 ```bash
-git clone https://github.com/emmanuel-ortiz/mexico-commercial-osint.git
+git clone https://github.com/your-org/mexico-commercial-osint.git
 cd mexico-commercial-osint
 
-# Setup environment
-cp .env.example .env
-make install
-
-# Run pipeline validation notebooks
-make ingest
-make resolve
-make score
+# Create virtual environment and install dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-## Notebook -> Module Migration Path
+### 2. Run Verification & Compliance Suite
 
-Notebooks in `notebooks/` serve as isolated validation environments. Every cell definition carries a `# MIGRATES TO: src/mx_osint/<module>.py::<function>` comment.
-
-| Notebook | Function / Target | Target Module |
-|---|---|---|
-| `01_data_ingest` | `Settings` | `src/mx_osint/config.py` |
-| `01_data_ingest` | `download_denue_state` | `src/mx_osint/sources/denue_loader.py` |
-| `01_data_ingest` | `read_denue_csv` | `src/mx_osint/sources/denue_loader.py` |
-| `01_data_ingest` | `filter_by_radius` | `src/mx_osint/sources/denue_loader.py` |
-| `01_data_ingest` | `filter_by_strata` | `src/mx_osint/sources/denue_loader.py` |
-| `02_entity_resolution` | `normalize_mexican_legal_name` | `src/mx_osint/resolution/mex_name_normalizer.py` |
-| `02_entity_resolution` | `assign_geohash_block` | `src/mx_osint/resolution/spatial_blocker.py` |
-| `02_entity_resolution` | `match_within_blocks` | `src/mx_osint/resolution/fuzzy_matcher.py` |
-| `02_entity_resolution` | `assign_entity_ids` | `src/mx_osint/resolution/entity_resolver.py` |
-| `03_scoring_export` | `impute_chronotype` | `src/mx_osint/enrichment/chronotype_imputer.py` |
-| `03_scoring_export` | `classify_digital_maturity` | `src/mx_osint/enrichment/digital_maturity.py` |
-| `03_scoring_export` | `score_b2b_propensity` | `src/mx_osint/enrichment/b2b_propensity.py` |
-| `03_scoring_export` | `classify_channel` | `src/mx_osint/activation/channel_classifier.py` |
-| `03_scoring_export` | `discover_channel_ddg` | `src/mx_osint/activation/channel_classifier.py` |
-| `03_scoring_export` | `export_dual` | `src/mx_osint/reporting/prospect_report.py` |
-
-Migrate functions to modules using:
 ```bash
-make migrate-cells
+# Run unit tests (Haversine math, Mexican name normalization, SCIAN mappings, routing)
+pytest
+
+# Verify zero blacklisted PII or private keys exist in the workspace
+bash scripts/check_blacklist.sh
 ```
 
-## Use Cases
+### 3. Run End-to-End Synthetic Pipeline
 
-- **B2B Commercial Prospecting:** Identify dense clusters of high-headcount employers within target catchment radiuses.
-- **Urban Chronotype Analysis:** Discover morning vs evening commercial activity by SCIAN sectors.
-- **Municipal Digital Maturity Index:** Measure corporate domain adoption across economic activities.
+See the [`examples/`](examples/) directory for standalone scripts, or launch the interactive demo:
 
-## License Compliance
+```bash
+# Execute standalone quickstart pipeline
+make demo
 
-See [docs/LICENSE_COMPLIANCE.md](docs/LICENSE_COMPLIANCE.md) for details on INEGI Libre Uso MX terms and OpenStreetMap ODbL isolation.
+# Or explore via interactive Jupyter Lab notebooks
+jupyter lab notebooks/
+```
 
-## Security & Clean-Room Policy
+---
 
-See [SECURITY.md](SECURITY.md). All commits are audited by `scripts/check_blacklist.sh`.
+## 💻 Usage Examples
+
+### Example 1: Mexican Corporate Name Normalization & Spatial Resolution
+
+Standard NLP normalizers fail on Mexican business registries due to legal suffixes (`S.A.P.I. de C.V.`), regional abbreviations (`Hnos.`, `Gpo.`), and diacritics.
+
+```python
+from mx_osint.resolution.mex_name_normalizer import normalize_mexican_business_name
+from mx_osint.resolution.spatial_blocker import SpatialBlocker
+
+raw_denue = "DISTRIBUIDORA DE INSUMOS DEL BAJÍO, S.A. DE C.V."
+raw_osm = "Distribuidora de Insumos del Bajio"
+
+norm_denue = normalize_mexican_business_name(raw_denue)
+norm_osm = normalize_mexican_business_name(raw_osm)
+assert norm_denue == norm_osm  # -> "distribuidora insumos bajio"
+```
+
+### Example 2: SCIAN Chronotype & B2B Propensity Enrichment
+
+When opening hours are missing from public records, `mx_osint` uses deterministic SCIAN priors (`data_contracts/scian_chronotype_mapping.json`) to infer when a business operates and whether it is a viable B2B counterparty.
+
+```python
+from mx_osint.enrichment.chronotype_imputer import ChronotypeImputer
+from mx_osint.enrichment.b2b_propensity import B2BPropensityEnricher
+
+imputer = ChronotypeImputer()
+enricher = B2BPropensityEnricher()
+
+# SCIAN 311811: Panificación industrial vs. 722412: Bares y cantinas
+profile = imputer.impute(scian_code="311811")
+propensity = enricher.evaluate(scian_code="311811", estrato_personal="31 a 50 personas")
+```
+
+---
+
+## 🛡️ Ethics, Privacy & License Compliance
+
+OSINT requires rigorous self-governance. This project enforces strict guardrails:
+
+* **No Personal PII:** We strictly process *Unidades Económicas* (commercial legal entities), never private individuals. See [`docs/ETHICS.md`](docs/ETHICS.md).
+* **Automated Blacklist Gates:** Pre-commit hooks (`.githooks/pre-commit`) and [`scripts/check_blacklist.sh`](scripts/check_blacklist.sh) block raw data dumps (`data/private/`, `data/raw/`) from ever entering version control.
+* **Open Data Attribution:** Compliant with INEGI’s *Libre Uso MX* terms and OpenStreetMap’s ODbL license. See [`docs/LICENSE_COMPLIANCE.md`](docs/LICENSE_COMPLIANCE.md).
+* **Deterministic Schema Contracts:** Enforces strict Pydantic schemas across pipeline transitions. See [`data_contracts/schema_golden_set.py`](data_contracts/schema_golden_set.py).
+* **Mathematical & Algorithmic Foundations:** See [`docs/OSINT_METHODOLOGY.md`](docs/OSINT_METHODOLOGY.md).
