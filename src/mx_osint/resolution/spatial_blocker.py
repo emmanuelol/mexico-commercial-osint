@@ -39,3 +39,18 @@ def spatial_join_osm_context(denue_df: pl.DataFrame, osm_df: pl.DataFrame, max_d
             verified_flags.append(False)
             contexts.append('')
     return denue_df.with_columns([pl.Series('nearest_osm_id', nearest_ids, dtype=pl.Utf8), pl.Series('osm_match_dist_m', nearest_dists, dtype=pl.Float64), pl.Series('osm_verified_storefront', verified_flags, dtype=pl.Boolean), pl.Series('osm_poi_context', contexts, dtype=pl.Utf8)])
+
+
+class SpatialBlocker:
+    """
+    Haversine spatial blocker for candidate pair reduction and cross-source verification
+    between INEGI DENUE establishment coordinates and OpenStreetMap POIs.
+    """
+
+    def __init__(self, max_dist_m: float = 50.0):
+        self.max_dist_m = max_dist_m
+
+    def block(self, denue_df: pl.DataFrame, osm_df: pl.DataFrame) -> pl.DataFrame:
+        """Executes spatial candidate bounding and storefront context attachment."""
+        return spatial_join_osm_context(denue_df, osm_df, max_dist_m=self.max_dist_m)
+

@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+
+
 def impute_morning_chronotype_4digit(scian_code: str | None, academic_level: str | None=None) -> dict:
     code = str(scian_code or '').strip()
     prefix2 = code[:2]
@@ -11,3 +15,32 @@ def impute_morning_chronotype_4digit(scian_code: str | None, academic_level: str
         return {'chronotype_key': 'Ejecutivo_Oficina_800_930AM', 'time_window': '08:00 - 09:30 AM', 'demand_driver': 'Llegada Directiva & Salas de Consejo', 'product_fit': 'Barra Ejecutiva & Convenio Corporativo CFDI 4.0', 'badge': "<span style='background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px;'>💼 OFICINA / EJECUTIVO (8:00-9:30 AM)</span>"}
     else:
         return {'chronotype_key': 'Apertura_Comercial_900_1000AM', 'time_window': '09:00 - 10:00 AM', 'demand_driver': 'Arranque Comercial & Pausa Matutina', 'product_fit': 'Take-away & Entrega Programada', 'badge': "<span style='background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px;'>🏪 COMERCIO (9:00-10:00 AM)</span>"}
+
+
+class ChronotypeImputer:
+    """
+    Infers operational chronotypes and B2B demand windows from 2-4 digit SCIAN codes.
+    Uses domain Bayesian priors (data_contracts/scian_chronotype_mapping.json) when ground-truth hours are absent.
+    """
+
+    def __init__(self, mapping_path: Path | str | None = None):
+        self.mapping_path = Path(mapping_path) if mapping_path else Path('data_contracts/scian_chronotype_mapping.json')
+        self._mapping: dict = {}
+        if self.mapping_path.exists():
+            try:
+                with open(self.mapping_path, 'r', encoding='utf-8') as f:
+                    self._mapping = json.load(f)
+            except Exception:
+                self._mapping = {}
+
+    def impute(self, scian_code: str | None, academic_level: str | None = None) -> dict:
+        """Imputes morning demand chronotype profile."""
+        profile = impute_morning_chronotype_4digit(scian_code, academic_level)
+        code = str(scian_code or '').strip()
+        prefix2 = code[:2]
+        if prefix2 in self._mapping:
+            contract_meta = self._mapping[prefix2]
+            profile['scian_sector'] = contract_meta.get('sector', '')
+            profile['gatekeeper_roles'] = contract_meta.get('gatekeeper_roles', [])
+        return profile
+

@@ -9,6 +9,7 @@ from IPython.display import HTML, display
 LEGAL_SUFFIX_REGEX = re.compile('\\b(S\\.?\\s*A\\.?\\s*P\\.?\\s*I\\.?\\s*(?:DE\\s*C\\.?\\s*V\\.?)?|S\\.?\\s*A\\.?\\s*B\\.?\\s*(?:DE\\s*C\\.?\\s*V\\.?)?|S\\.?\\s*A\\.?\\s*DE\\s*C\\.?\\s*V\\.?|S\\.?\\s*DE\\s*R\\.?\\s*L\\.?\\s*(?:DE\\s*C\\.?\\s*V\\.?)?|S\\.?\\s*C\\.?\\s*DE\\s*R\\.?\\s*L\\.?|S\\.?\\s*C\\.?|A\\.?\\s*C\\.?|S\\.?\\s*A\\.?|SAB\\s*DE\\s*CV)\\b', re.IGNORECASE)
 BRANCH_QUALIFIER_REGEX = re.compile('\\b(PLANTA|MATRIZ|SUCURSAL|CORPORATIVO|CAMPUS|BODEGA|NORTE|SUR|LEON|GUANAJUATO|BAJIO|MEXICO)\\b', re.IGNORECASE)
 PUNCTUATION_REGEX = re.compile('[,.\\-\'\\"]')
+SPANISH_NAME_STOPWORDS = {'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'Y', 'EN', 'PARA', 'CON'}
 
 def normalize_mexican_legal_name(name: str) -> str:
     if not name or not isinstance(name, str):
@@ -18,6 +19,18 @@ def normalize_mexican_legal_name(name: str) -> str:
     text = LEGAL_SUFFIX_REGEX.sub(' ', text)
     text = PUNCTUATION_REGEX.sub(' ', text)
     return ' '.join(text.split()).strip()
+
+def normalize_mexican_business_name(name: str) -> str:
+    """
+    Normalizes Mexican business trade names for deterministic cross-source matching:
+    removes diacritics, strips statutory legal suffixes, punctuation, and common Spanish stopwords,
+    returning a clean lowercased token sequence.
+    """
+    if not name or not isinstance(name, str):
+        return ''
+    cleaned = normalize_mexican_legal_name(name)
+    tokens = [t.lower() for t in cleaned.split() if t.upper() not in SPANISH_NAME_STOPWORDS]
+    return ' '.join(tokens)
 
 def strip_corporate_branch_qualifiers(name: str) -> str:
     cleaned = normalize_mexican_legal_name(name)

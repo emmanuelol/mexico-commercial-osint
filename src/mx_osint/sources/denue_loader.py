@@ -106,3 +106,35 @@ def persist_stage1_extract(df: pl.DataFrame, state_code: str, radius_km: float, 
     logger.info(f'✅ Persisted Stage-01 processed extract ({len(df):,} rows) -> {proc_path}')
     logger.info(f'✅ Persisted Stage-02 handoff extract ({len(handoff_df):,} rows) -> {raw_path}')
     return (proc_path, raw_path)
+
+
+class DENUELoader:
+    """
+    Standardized loader and filter for INEGI DENUE economic registries.
+    Supports local Parquet/CSV files and official INEGI state zip downloads.
+    """
+
+    def __init__(self, cache_dir: Path | str = Path("data/raw")):
+        self.cache_dir = Path(cache_dir)
+
+    def load(self, source_path: Path | str) -> pl.DataFrame:
+        path = Path(source_path)
+        if not path.exists():
+            raise FileNotFoundError(f"DENUE source file not found: {path}")
+        if path.suffix == ".parquet":
+            return pl.read_parquet(path)
+        elif path.suffix == ".zip":
+            return read_denue_csv(path)
+        elif path.suffix == ".csv":
+            return pl.read_csv(path, encoding="latin1")
+        raise ValueError(f"Unsupported DENUE file extension: {path.suffix}")
+
+    def download(self, state_code: str) -> Path:
+        return download_denue_state(state_code, self.cache_dir)
+
+    def filter_radius(self, df: pl.DataFrame, target_lat: float, target_lon: float, radius_km: float) -> pl.DataFrame:
+        return filter_by_radius(df, target_lat, target_lon, radius_km)
+
+    def filter_strata(self, df: pl.DataFrame, min_strata: str) -> pl.DataFrame:
+        return filter_by_strata(df, min_strata)
+
