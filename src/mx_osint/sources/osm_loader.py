@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import polars as pl
 import requests
 from loguru import logger
@@ -41,3 +42,47 @@ def query_osm_amenities(lat: float, lon: float, radius_km: float, cache_path: Pa
     df_osm.write_parquet(cache_path)
     logger.info(f'✅ Persisted {len(df_osm):,} unique OSM amenities -> {cache_path}')
     return df_osm
+
+
+class OSMLoader:
+    """
+    Standardized loader and Overpass API query interface for OpenStreetMap layers.
+    Maintains ODbL horizontal separation and supports Parquet and GeoJSON files.
+    """
+
+    def __init__(self, cache_path: Path | str = Path('data/processed/osm_amenities.parquet')):
+        self.cache_path = Path(cache_path)
+
+    def load(self, source_path: Path | str) -> pl.DataFrame:
+        path = Path(source_path)
+        if not path.exists():
+            raise FileNotFoundError(f'OSM source file not found: {path}')
+        if path.suffix == '.parquet':
+            return pl.read_parquet(path)
+        elif path.suffix in ('.geojson', '.json'):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            records = []
+            for feat in data.get('features', []):
+                props = feat.get('properties', {})
+                geom = feat.get('geometry', {})
+                coords = geom.get('coordinates', [0.0, 0.0])
+                records.append({
+                    'osm_id': str(props.get('osm_id', '')),
+                    'type': feat.get('type', 'node'),
+                    'lat': float(coords[1]),
+                    'lon': float(coords[0]),
+                    'name': str(props.get('name', '')),
+                    'amenity': str(props.get('amenity', '')),
+                    'office': str(props.get('office', '')),
+                    'shop': str(props.get('shop', '')),
+                    'opening_hours': str(props.get('opening_hours', '')),
+                })
+            if not records:
+                return pl.DataFrame()
+            return pl.DataFrame(records).unique(subset=['osm_id'], keep='first')
+        raise ValueError(f'Unsupported OSM file extension: {path.suffix}')
+
+    def query(self, lat: float, lon: float, radius_km: float) -> pl.DataFrame:
+        return query_osm_amenities(lat, lon, radius_km, cache_path=self.cache_path)
+

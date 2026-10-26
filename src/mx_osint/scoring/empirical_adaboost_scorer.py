@@ -106,3 +106,38 @@ def calculate_critic_and_adaboost_weights(df: pl.DataFrame) -> tuple[pl.DataFram
     rescued_cnt = df_out.filter(pl.col('is_rescued_partial')).height
     logger.info(f'✅ Empirical 5D Scoring (CRITIC + AdaBoost) complete: {rescued_cnt} high-wage Partial Targets rescued.')
     return (df_out, weight_comparison)
+
+
+class EmpiricalAdaBoostScorer:
+    """
+    Empirical 5D Multi-Criteria Prospect Scorer fusing unsupervised CRITIC objective weighting
+    with supervised AdaBoost decision tree classifiers to calibrate B2B conversion scores.
+    """
+
+    def __init__(self, n_estimators: int = 100, learning_rate: float = 0.5, random_state: int = 42):
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.random_state = random_state
+
+    def score(
+        self,
+        df: pl.DataFrame,
+        traffic_nodes: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[pl.DataFrame, dict[str, dict[str, float]]]:
+        """Calculates CRITIC and AdaBoost 5D scores for candidate business entities."""
+        if traffic_nodes is None:
+            _, traffic_nodes = build_corridor_geometries()
+        if 'est_monthly_wage_mxn' not in df.columns:
+            df = enrich_empirical_income_and_scholarship(df, traffic_nodes)
+        if 'b2b_status' not in df.columns:
+            from mx_osint.scoring.b2b_qualifier import qualify_b2b_target
+            df = df.with_columns(
+                pl.struct(['scian_code', 'employee_strata'])
+                .map_elements(
+                    lambda s: qualify_b2b_target(s.get('scian_code'), s.get('employee_strata')),
+                    return_dtype=pl.Utf8,
+                )
+                .alias('b2b_status')
+            )
+        return calculate_critic_and_adaboost_weights(df)
+

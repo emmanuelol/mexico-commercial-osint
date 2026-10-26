@@ -86,3 +86,41 @@ def solve_route_tsp(subset_df: pl.DataFrame) -> pl.DataFrame:
         ordered_out.append(item)
         c_lat, c_lon = (dest_lat, dest_lon)
     return pl.DataFrame(ordered_out)
+
+
+class ChannelClassifier:
+    """
+    Activation Channel Classifier & Offer Router.
+    Routes scored commercial entities to optimal engagement vectors (Direct Email,
+    WhatsApp Business, Field Visit) and assigns contextual commercial playbooks.
+    """
+
+    def __init__(self, anchor_lat: float = ANCHOR_LAT, anchor_lon: float = ANCHOR_LON):
+        self.anchor_lat = anchor_lat
+        self.anchor_lon = anchor_lon
+
+    def classify(self, account: dict) -> dict:
+        """Classifies primary outreach channel and assigns commercial playbook."""
+        playbook = assign_offer_playbook(account)
+        email = str(account.get('email') or account.get('correoelec') or '').strip()
+        phone = str(account.get('phone') or account.get('telefono') or '').strip()
+        web = str(account.get('website') or account.get('www') or '').strip()
+
+        if email and '@' in email:
+            channel = 'Direct Email (Verified DENUE)'
+        elif phone:
+            channel = 'WhatsApp Business / Direct Phone'
+        elif web:
+            channel = 'Digital Outreach / Web Form'
+        else:
+            channel = 'Field Sales Visit'
+
+        return {
+            'best_contact_channel': channel,
+            **playbook,
+        }
+
+    def route_field_visits(self, subset_df: pl.DataFrame) -> pl.DataFrame:
+        """Solves 2-opt TSP field visit sequencing for on-the-ground sales."""
+        return solve_route_tsp(subset_df)
+
