@@ -1,4 +1,9 @@
-.PHONY: install notebook ingest resolve score test check-blacklist build migrate-cells clean
+.PHONY: install notebook ingest resolve score test check-blacklist build migrate-cells clean demo
+
+PYTHON = $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
+demo:
+	$(PYTHON) examples/01_quickstart_pipeline.py
 
 install:
 	pip install -e ".[dev]"
